@@ -20,10 +20,8 @@
         })
       });
       var data = await res.json();
-      // Gemini devuelve la respuesta dentro de candidates[0].content.parts[0].text
       if(data && data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts && data.candidates[0].content.parts[0]){
         var texto = data.candidates[0].content.parts[0].text || '';
-        // limpia bloques de código si la IA los agrega
         texto = texto.replace(/```json/g,'').replace(/```/g,'').trim();
         var parsed = JSON.parse(texto);
         if(parsed && typeof parsed.kcal === 'number') est = parsed;
