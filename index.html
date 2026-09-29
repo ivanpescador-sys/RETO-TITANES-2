@@ -1,37 +1,36 @@
-  async function handleAddFood(){
-    var nombre = (document.getElementById('foodInput').value || '').trim();
-    var cantidad = parseFloat(document.getElementById('foodQty').value) || 1;
-    if(!nombre) return;
-    var per = findFood(nombre);
-    if(per){ addEntry(nombre, cantidad, per); return; }
+async function handleAddFood(){
+  var nombre = (document.getElementById('foodInput').value || '').trim();
+  var cantidad = parseFloat(document.getElementById('foodQty').value) || 1;
+  if(!nombre) return;
+  var per = findFood(nombre);
+  if(per){ addEntry(nombre, cantidad, per); return; }
 
-    var area = document.getElementById('estimateArea');
-    area.innerHTML = '<p class="note" style="margin-top:10px;">🤖 Consultando la IA sobre "'+escapeHtml(nombre)+'"…</p>';
+  var area = document.getElementById('estimateArea');
+  area.innerHTML = '<p class="note" style="margin-top:10px;">⏳ Consultando la IA sobre "'+escapeHtml(nombre)+'"...</p>';
 
-    var est = null;
-    try{
-      var res = await fetch('/api/gemini', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({
-          prompt: 'Da SOLO un JSON sin texto adicional ni bloques de código con esta forma exacta: {"kcal":numero,"proteina":numero,"carbos":numero,"grasa":numero}. ' +
-                  'Estima el aporte nutrimental de UNA porción casera típica mexicana de: "' + nombre + '". ' +
-                  'proteina, carbos y grasa en gramos; kcal totales de esa porción.'
-        })
-      });
-      var data = await res.json();
-      if(data && data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts && data.candidates[0].content.parts[0]){
-        var texto = data.candidates[0].content.parts[0].text || '';
-        texto = texto.replace(/```json/g,'').replace(/```/g,'').trim();
-        var parsed = JSON.parse(texto);
-        if(parsed && typeof parsed.kcal === 'number') est = parsed;
-      }
-    }catch(e){ est = null; }
-
-    if(est){
-      showEstimateForm(nombre, cantidad, est);
-      return;
+  var est = null;
+  try{
+    var res = await fetch('https://imaginative-crepe-00733b.netlify.app/api/gemini', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        prompt: 'Da SOLO un JSON sin texto adicional ni bloques de código con esta forma exacta: {"kcal":numero,"proteina":numero,"carbos":numero,"grasa":numero}. ' +
+                'Estima el aporte nutricional de UNA porción casera típica mexicana de: "' + nombre + '". ' +
+                'proteina, carbos y grasa en gramos; kcal totales de esa porción.'
+      })
+    });
+    var data = await res.json();
+    if(data && data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts && data.candidates[0].content.parts[0]){
+      var texto = data.candidates[0].content.parts[0].text || '';
+      texto = texto.replace(/```json/g,'').replace(/```/g,'').trim();
+      var parsed = JSON.parse(texto);
+      if(parsed && typeof parsed.kcal === 'number') est = parsed;
     }
+  }catch(e){ est = null; }
 
-    showEstimateForm(nombre, cantidad, {kcal:'', proteina:'', carbos:'', grasa:''});
+  if(est){
+    showEstimateForm(nombre, cantidad, est);
+    return;
   }
+  showEstimateForm(nombre, cantidad, {kcal:'', proteina:'', carbos:'', grasa:''});
+}
