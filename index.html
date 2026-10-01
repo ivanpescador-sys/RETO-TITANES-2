@@ -186,7 +186,6 @@
     appId: "1:499364032028:web:d9722ffc2da10f0bc139d9",
     measurementId: "G-MJ6WNKRP9B"
   };
-  var OWNER_PIN = "4817";
 
   var DEFAULT_FOODS = {
     "pechuga de pollo asada (100g)": {kcal:165, proteina:31, carbos:0, grasa:3.6},
@@ -473,13 +472,19 @@
       type: 'password',
       placeholder: 'PIN',
       onSubmit: function(val){
-        if(String(val).trim() === OWNER_PIN){
-          try{ localStorage.setItem('macros_owner_pin_ok', '1'); }catch(e){}
-          state.isOwner = true;
-          enterApp();
-        } else {
-          showToast('PIN incorrecto.', true);
-        }
+        fetch('/api/owner', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({pin: String(val).trim()})
+        }).then(function(r){ return r.json(); }).then(function(d){
+          if(d && d.ok){
+            try{ localStorage.setItem('macros_owner_pin_ok', '1'); }catch(e){}
+            state.isOwner = true;
+            enterApp();
+          } else {
+            showToast('PIN incorrecto.', true);
+          }
+        }).catch(function(){ showToast('No se pudo verificar el PIN. Revisa tu conexión.', true); });
       }
     });
   }
