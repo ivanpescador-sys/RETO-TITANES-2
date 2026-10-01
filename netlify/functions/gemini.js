@@ -1,40 +1,53 @@
-export default async (req, context) => {
+// Función de Netlify: recibe { prompt } desde la app y llama a Gemini.
+// La llave NO va en el código: se guarda en Netlify como variable de entorno GEMINI_API_KEY.
+
+const MODEL = "gemini-2.5-flash";
+
+const headers = {
+  "Content-Type": "application/json"
+};
+
+exports.handler = async (event) => {
+  if (event.httpMethod !== "POST") {
+    return { statusCode: 405, headers, body: JSON.stringify({ error: "Método no permitido" }) };
+  }
+
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    return { statusCode: 500, headers, body: JSON.stringify({ error: "Falta GEMINI_API_KEY en Netlify" }) };
+  }
+
+  let prompt = "";
   try {
-    const { prompt } = await req.json();
-    const apiKey = process.env.GEMINI_API_KEY;
+    prompt = (JSON.parse(event.body || "{}").prompt || "").toString();
+  } catch (e) {
+    return { statusCode: 400, headers, body: JSON.stringify({ error: "JSON inválido" }) };
+  }
 
-    if (!apiKey) {
-      return new Response(JSON.stringify({ error: "Falta API key" }), {
-        status: 500,
-        headers: { "Content-Type": "application/json" }
-      });
-    }
+  // Límite para que nadie use tu crédito con textos enormes
+  if (!prompt || prompt.length > 600) {
+    return { statusCode: 400, headers, body: JSON.stringify({ error: "Prompt vacío o demasiado largo" }) };
+  }
 
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+  try {
+    const res = await fetch(
+      "https://generativelanguage.googleapis.com/v1beta/models/" + MODEL + ":generateContent",
       {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-goog-api-key": apiKey
+        },
         body: JSON.stringify({
-          contents: [{
-            parts: [{ text: prompt }]
-          }]
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { temperature: 0.2, maxOutputTokens: 200 }
         })
       }
     );
-
-    const data = await response.json();
-    return new Response(JSON.stringify(data), {
-      status: response.status,
-      headers: { "Content-Type": "application/json" }
-    });
-
-  } catch (error) {
-    return new Response(JSON.stringify({ error: error.message }), {
-      status: 500,
-      headers: { "Content-Type": "application/json" }
-    });
+    const data = await res.json();
+    // Se devuelve tal cual: la app lee data.candidates[0].content.parts[0].text
+    return { statusCode: res.status, headers, body: JSON.stringify(data) };
+  } catch (e) {
+    return { statusCode: 502, headers, body: JSON.stringify({ error: "No se pudo contactar a Gemini" }) };
   }
 };
-
-export const config = { path: "/api/gemini" };
