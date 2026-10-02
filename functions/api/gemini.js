@@ -25,7 +25,7 @@ export async function onRequestPost({ request, env }) {
         headers: { "Content-Type": "application/json", "x-goog-api-key": env.GEMINI_API_KEY },
         body: JSON.stringify({
           contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { temperature: 0.2, maxOutputTokens: 200 }
+          generationConfig: { temperature: 0.2, maxOutputTokens: 1000 }
         })
       }
     );
