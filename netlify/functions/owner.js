@@ -1,24 +1,28 @@
-// Verifica el PIN del entrenador en el servidor.
-// El PIN vive en Netlify como variable de entorno OWNER_PIN, no en el código.
-const crypto = require("crypto");
+// Cloudflare Pages Function: responde en /api/owner
+// Verifica el PIN del entrenador. Vive en Cloudflare como secreto OWNER_PIN.
 
-const headers = { "Content-Type": "application/json" };
+const json = (obj, status = 200) =>
+  new Response(JSON.stringify(obj), { status, headers: { "Content-Type": "application/json" } });
 
-exports.handler = async (event) => {
-  if (event.httpMethod !== "POST") {
-    return { statusCode: 405, headers, body: JSON.stringify({ ok: false }) };
-  }
-  const real = process.env.OWNER_PIN;
-  if (!real) {
-    return { statusCode: 500, headers, body: JSON.stringify({ ok: false, error: "Falta OWNER_PIN en Netlify" }) };
-  }
+async function sha256(text) {
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+  return new Uint8Array(buf);
+}
+
+export async function onRequestPost({ request, env }) {
+  if (!env.OWNER_PIN) return json({ ok: false, error: "Falta OWNER_PIN" }, 500);
+
   let pin = "";
-  try { pin = String(JSON.parse(event.body || "{}").pin || ""); } catch (e) {}
+  try {
+    pin = String((await request.json()).pin || "");
+  } catch (e) {}
 
-  const a = crypto.createHash("sha256").update(pin).digest();
-  const b = crypto.createHash("sha256").update(real).digest();
-  const ok = crypto.timingSafeEqual(a, b);
+  const a = await sha256(pin);
+  const b = await sha256(String(env.OWNER_PIN));
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a[i] ^ b[i];
+  const ok = diff === 0;
 
   if (!ok) await new Promise((r) => setTimeout(r, 800)); // frena intentos a lo bruto
-  return { statusCode: 200, headers, body: JSON.stringify({ ok }) };
-};
+  return json({ ok });
+}
