@@ -169,7 +169,7 @@
   <div id="main"></div>
 
   <div class="card" style="margin-top:0;">
-    <p class="note">Creatina monohidratada: 5 g al día, dosis de mantenimiento estándar. Objetivos calculados con la fórmula Mifflin-St Jeor; son una referencia de tu entrenador, no sustituyen a un nutriólogo certificado.</p>
+    <p class="note">Creatina monohidratada: 0.07 g por kg de peso al día. Objetivos calculados con la fórmula Mifflin-St Jeor; son una referencia de tu entrenador, no sustituyen a un nutriólogo certificado.</p>
   </div>
 </div>
 
@@ -804,6 +804,7 @@
           '<option value="bajar"'+(p.objetivo==='bajar'||!p.objetivo?' selected':'')+'>Bajar de peso</option>' +
           '<option value="ganar"'+(p.objetivo==='ganar'?' selected':'')+'>Ganar masa muscular</option>' +
           '<option value="mantener"'+(p.objetivo==='mantener'?' selected':'')+'>Mantenerme</option>' +
+      '<option value="recomp"'+(p.objetivo==='recomp'?' selected':'')+'>Recomposición (perder grasa y ganar músculo)</option>' +
         '</select></div>' +
         '<button class="btn btn-primary" id="saveOnboard" style="width:100%; margin-top:6px;">Calcular mis macros</button>' +
         '<p class="note" style="margin-top:10px;">Tus datos se guardan solo en este celular, no en un servidor.</p>' +
@@ -842,7 +843,7 @@
     var baseKcal = p.objetivo==='bajar' ? baseTdee-450 : (p.objetivo==='ganar' ? baseTdee+350 : baseTdee);
     if(baseKcal < 1200) baseKcal = 1200;
 
-    var proteina = p.peso * 2.0;
+   var proteina = p.peso * (p.objetivo==='recomp' ? 2.2 : 2.0);
     var proteinaKcal = proteina*4;
     var grasaKcal = baseKcal*0.25;
     var grasa = grasaKcal/9;
@@ -855,7 +856,7 @@
   }
 
   function weeksToGoal(p, baseKcal, bmr){
-    if(!p.pesoMeta || p.objetivo==='mantener') return null;
+   if(!p.pesoMeta || p.objetivo==='mantener' || p.objetivo==='recomp') return null;
     var diffKg = p.objetivo==='bajar' ? (p.peso - p.pesoMeta) : (p.pesoMeta - p.peso);
     if(diffKg <= 0) return null;
     var dailyDelta = p.objetivo==='bajar' ? 450 : 350;
@@ -985,38 +986,45 @@
     renderMain();
   }
 
-  function hasProteinScoopToday(){
-    return todaysEntries().some(function(e){ return e.nombre === PROTEIN_SCOOP_FOOD.nombre; });
+  function scoopsToday(){
+    var n = 0;
+    todaysEntries().forEach(function(e){ if(e.nombre === PROTEIN_SCOOP_FOOD.nombre) n = e.cantidad || 1; });
+    return n;
   }
-  function toggleProteinScoop(){
-    var entries = todaysEntries();
-    var idx = -1;
-    entries.forEach(function(e,i){ if(e.nombre === PROTEIN_SCOOP_FOOD.nombre) idx = i; });
-    if(idx > -1){
-      entries.splice(idx,1);
-    } else {
+  function hasProteinScoopToday(){ return scoopsToday() > 0; }
+  function setProteinScoops(n){
+    var entries = todaysEntries().filter(function(e){ return e.nombre !== PROTEIN_SCOOP_FOOD.nombre; });
+    if(n > 0){
       entries.push({
-        nombre: PROTEIN_SCOOP_FOOD.nombre, cantidad: 1,
-        kcal: PROTEIN_SCOOP_FOOD.kcal, proteina: PROTEIN_SCOOP_FOOD.proteina,
-        carbos: PROTEIN_SCOOP_FOOD.carbos, grasa: PROTEIN_SCOOP_FOOD.grasa
+        nombre: PROTEIN_SCOOP_FOOD.nombre, cantidad: n,
+        kcal: PROTEIN_SCOOP_FOOD.kcal*n, proteina: PROTEIN_SCOOP_FOOD.proteina*n,
+        carbos: PROTEIN_SCOOP_FOOD.carbos*n, grasa: PROTEIN_SCOOP_FOOD.grasa*n
       });
     }
     state.log[todayKey()] = entries;
     saveLog();
     renderMain();
   }
+  function creatinaDosis(){
+    var kg = state.perfil && state.perfil.peso;
+    return kg ? Math.round(kg*0.07*10)/10 : null;
+  }
 
   function renderSupplementsCard(){
     var cre = todaysCreatina();
-    var scoop = hasProteinScoopToday();
+    var n = scoopsToday();
+    var dosis = creatinaDosis();
+    var btns = [1,2,3].map(function(i){
+      var on = (n === i);
+      return '<button class="btn scoopOpt" data-n="'+i+'" style="padding:8px 14px; margin-left:6px;'+(on?' background:var(--prot); border-color:var(--prot); color:#fff;':'')+'">'+i+'</button>';
+    }).join('');
     return '<div class="card">' +
       '<h3>Suplementos de hoy</h3>' +
-      '<div class="checkRow"><span>Creatina (dosis diaria)</span><button class="checkBtn" id="creatinaBtn">'+(cre?'✅':'◻️')+'</button></div>' +
-      '<div class="checkRow"><span>Proteína en polvo (1 scoop, 35g)</span><button class="checkBtn" id="scoopBtn">'+(scoop?'✅':'◻️')+'</button></div>' +
-      '<p class="note" style="margin-top:8px;">Al marcar la proteína se suman automáticamente '+fmt(PROTEIN_SCOOP_FOOD.kcal)+' kcal, '+fmt(PROTEIN_SCOOP_FOOD.proteina)+'g proteína, '+fmt(PROTEIN_SCOOP_FOOD.carbos)+'g carbos y '+fmt(PROTEIN_SCOOP_FOOD.grasa)+'g grasa a tus macros de hoy.</p>' +
+      '<div class="checkRow"><span>Creatina: <b>'+(dosis!=null?fmt(dosis,1):'—')+' g</b> hoy</span><button class="checkBtn" id="creatinaBtn">'+(cre?'✅':'◻️')+'</button></div>' +
+      '<div class="checkRow"><span>Proteína en polvo (scoops de 35 g)</span><span>'+btns+'</span></div>' +
+      '<p class="note" style="margin-top:8px;">Cada scoop suma '+fmt(PROTEIN_SCOOP_FOOD.kcal)+' kcal, '+fmt(PROTEIN_SCOOP_FOOD.proteina)+'g proteína, '+fmt(PROTEIN_SCOOP_FOOD.carbos)+'g carbos y '+fmt(PROTEIN_SCOOP_FOOD.grasa)+'g grasa a tus macros de hoy. Toca de nuevo el número activo para quitarlo. La creatina se calcula con 0.07 g por kg de tu peso.</p>' +
     '</div>';
   }
-
   // ---------- pago mensual ----------
   function clampDay(year, monthIndex, day){
     var last = new Date(year, monthIndex+1, 0).getDate();
@@ -1066,7 +1074,7 @@
       'Carbos: ' + fmt(totals.carbos) + 'g / ' + fmt(targets.carbos) + 'g',
       'Grasas: ' + fmt(totals.grasa) + 'g / ' + fmt(targets.grasa) + 'g',
       'Creatina hoy: ' + (todaysCreatina() ? '✅' : '❌'),
-      'Scoop de proteína: ' + (hasProteinScoopToday() ? '✅' : '❌'),
+'Scoops de proteína: ' + (scoopsToday() > 0 ? scoopsToday() + ' ✅' : '❌'),
       'Racha actual: ' + st.current + ' día' + (st.current===1?'':'s')
     ];
     return lines.join('\n');
@@ -1316,7 +1324,12 @@
     document.getElementById('addFoodBtn').addEventListener('click', handleAddFood);
     document.getElementById('waBtn').addEventListener('click', sendWhatsapp);
     document.getElementById('creatinaBtn').addEventListener('click', toggleCreatina);
-    document.getElementById('scoopBtn').addEventListener('click', toggleProteinScoop);
+    Array.prototype.forEach.call(document.querySelectorAll('.scoopOpt'), function(b){
+      b.addEventListener('click', function(){
+        var n = parseInt(b.getAttribute('data-n'), 10);
+        setProteinScoops(scoopsToday() === n ? 0 : n);
+      });
+    });
     document.getElementById('burnInput').addEventListener('change', function(){
       var val = parseFloat(document.getElementById('burnInput').value) || 0;
       saveTodaysBurn(val);
@@ -1325,7 +1338,7 @@
     renderHistorial();
   }
 
-  function objetivoLabel(o){ return o==='bajar' ? 'bajar de peso' : o==='ganar' ? 'ganar masa muscular' : 'mantenerme'; }
+ function objetivoLabel(o){ return o==='bajar' ? 'bajar de peso' : o==='ganar' ? 'ganar masa muscular' : o==='recomp' ? 'recomposición corporal' : 'mantenerme'; }
 
   function renderFoodList(entries){
     var box = document.getElementById('foodList');
