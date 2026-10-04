@@ -767,11 +767,11 @@
     state.histYear = now.getFullYear();
     state.histMonth = now.getMonth();
 
-    if(!state.perfil){ renderOnboarding(); }
+    if(state.isOwner && !state.perfil){ renderOwnerOnly(); } else if(!state.perfil){ renderOnboarding(); }
     else { renderMain(); }
   }
 
-  // ---------- onboarding ----------
+  function renderOwnerOnly(){ document.getElementById('gaugeRow').innerHTML = ''; document.getElementById('main').innerHTML = renderOwnerPanel(); wireOwnerPanel(); } function renderOwnerOnly(){ document.getElementById('gaugeRow').innerHTML = ''; document.getElementById('main').innerHTML = renderOwnerPanel(); wireOwnerPanel(); } // ---------- onboarding ----------
   function renderOnboarding(){
     var el = document.getElementById('main');
     document.getElementById('gaugeRow').innerHTML = '';
