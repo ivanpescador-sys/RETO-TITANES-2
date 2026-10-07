@@ -191,7 +191,7 @@
   <div id="main"></div>
 
   <div class="card" style="margin-top:0;">
-    <p class="note">Creatina monohidratada: 0.07 g por kg de peso al día. Objetivos calculados con la fórmula Mifflin-St Jeor; son una referencia de tu entrenador, no sustituyen a un nutriólogo certificado.</p>
+    <p class="note">Creatina monohidratada: 0.07 g por kg de peso al día. Tu meta de calorías es fija: se calcula con la fórmula Mifflin-St Jeor, tus días de entrenamiento a la semana y un déficit, y no cambia por el ejercicio que registres cada día. Son una referencia de tu entrenador, no sustituyen a un nutriólogo certificado.</p>
   </div>
 </div>
 
@@ -246,6 +246,13 @@
     0:'Descanso', 1:'HIIT + halterofilia', 2:'Tren superior en circuito',
     3:'Descanso', 4:'Tren superior en circuito', 5:'Estilo CrossFit', 6:'Descanso'
   };
+
+  // ---- Modelo de meta calórica FIJA ----
+  // TDEE = BMR (Mifflin-St Jeor) x factor de actividad según días de entreno por semana
+  var ACTIVITY_FACTORS = { 1:1.2, 2:1.375, 3:1.55, 4:1.65, 5:1.725, 6:1.8 };
+  var DEFAULT_TRAIN_DAYS = 3;
+  var PROTEIN_G_PER_KG = 2.1;  // rango 2.0 - 2.2 g/kg
+  var FAT_G_PER_KG = 0.9;      // rango 0.8 - 1.0 g/kg
 
   // las 4 comidas del día
   var MEALS = [
@@ -1026,13 +1033,15 @@
         tr('Estatura', p.estatura!=null ? p.estatura+' cm' : null) +
         tr('Edad', p.edad!=null ? p.edad+' años' : null) +
         tr('Sexo (para el cálculo)', sexoLabel(p.sexo)) +
+        tr('Días de entreno por semana', (p.diasEntreno || DEFAULT_TRAIN_DAYS)+' días') +
         tr('Objetivo', objetivoLabel(p.objetivo)) +
         tr('Peso meta', p.pesoMeta ? fmt(p.pesoMeta,1)+' kg' : null) +
         tr('Gramos por scoop', p.scoopG ? p.scoopG+' g' : null) +
         tr('Metabolismo basal (báscula)', p.bmrManual ? fmt(p.bmrManual)+' kcal' : 'no capturado (usa fórmula)') +
         tr('Última cita de medidas', p.ultimaPesada ? fmtDayY(p.ultimaPesada) : null) +
         tr('Creatina diaria', p.peso ? fmt(p.peso*0.07,1)+' g' : null) +
-        tr('Meta base diaria', fmt(base.kcal)+' kcal · P '+fmt(base.proteina)+' g · C '+fmt(base.carbos)+' g · G '+fmt(base.grasa)+' g') +
+        tr('Meta diaria fija', fmt(base.kcal)+' kcal · P '+fmt(base.proteina)+' g · C '+fmt(base.carbos)+' g · G '+fmt(base.grasa)+' g') +
+        tr('Cálculo de la meta', 'TDEE '+fmt(base.tdee)+' kcal ('+deficitLabel(base.deficit)+')') +
         tr('Datos actualizados', m.perfilActualizado ? new Date(m.perfilActualizado).toLocaleDateString('es-MX',{day:'numeric',month:'short',year:'numeric'}) : null) +
       '</table>';
     } else {
@@ -1153,7 +1162,7 @@
         '<div class="histStats">' +
           '<div class="histStat"><div class="n">'+creDias+'</div><div class="l">días con creatina</div></div>' +
           '<div class="histStat"><div class="n">'+(scoopDias ? fmt(scoopSum/scoopDias,1) : '0')+'</div><div class="l">scoops promedio ('+scoopDias+' días)</div></div>' +
-          '<div class="histStat"><div class="n">'+(burnDias ? fmt(burnSum/burnDias) : '—')+'</div><div class="l">kcal de ejercicio promedio</div></div>' +
+          '<div class="histStat"><div class="n">'+(burnDias ? fmt(burnSum/burnDias) : '—')+'</div><div class="l">kcal de ejercicio promedio (bitácora)</div></div>' +
         '</div>';
       if(rows.length){
         function cell(l, p){
@@ -1196,7 +1205,8 @@
     if(!entries.length && !cre) return null;
     var burnStore = loadLocal('macros_burn_v1', {});
     var burn = burnStore[key] != null ? burnStore[key] : (key === todayKey() ? (WORKOUT_KCAL_BY_WEEKDAY[new Date().getDay()] || 0) : 0);
-    var t = sumTotals(entries), tg = computeTargets(state.perfil, burn);
+    // la meta es fija: el ejercicio (burn) solo se guarda como bitácora
+    var t = sumTotals(entries), tg = computeTargets(state.perfil);
     var scoops = 0, n = 0, meals = {};
     entries.forEach(function(e){
       if(e.nombre === PROTEIN_SCOOP_FOOD.nombre){ scoops = e.cantidad || 1; return; }
@@ -1294,6 +1304,10 @@
     document.getElementById('gaugeRow').innerHTML = '';
     clearHeaderWho();
     var p = state.perfil || {};
+    var diasSel = p.diasEntreno || DEFAULT_TRAIN_DAYS;
+    var diasOpts = [2,3,4,5,6].map(function(n){
+      return '<option value="'+n+'"'+(diasSel===n?' selected':'')+'>'+n+' días por semana</option>';
+    }).join('');
     el.innerHTML =
       (state.isOwner ? renderOwnerPanel() : '') +
       '<div class="card">' +
@@ -1316,6 +1330,8 @@
             '<option value="hombre"'+(p.sexo==='hombre'?' selected':'')+'>Hombre</option>' +
           '</select></div>' +
         '</div>' +
+        '<div class="field"><label>¿Cuántos días entrenas a la semana en Titanes?</label><select id="p_dias">'+diasOpts+'</select></div>' +
+        '<p class="note" style="margin:-6px 0 12px;">Con esto se calcula tu meta de calorías fija (de lunes a domingo). El ejercicio que registres cada día no la cambia.</p>' +
         '<div class="field"><label>Metabolismo basal medido por tu entrenador (kcal/d, opcional)</label><input id="p_bmrManual" type="number" placeholder="Déjalo en blanco si no lo tienes" value="'+(p.bmrManual||'')+'"></div>' +
         '<p class="note" style="margin:-6px 0 12px;">Si tu entrenador te dio este dato con su báscula de bioimpedancia, tus calorías y macros se calculan con ese número real en vez de la fórmula estimada.</p>' +
         '<div class="field"><label>Objetivo</label><select id="p_objetivo">' +
@@ -1340,6 +1356,7 @@
         scoopG: parseFloat(document.getElementById('p_scoopG').value) || 24,
         ultimaPesada: document.getElementById('p_ultimaPesada').value || null,
         bmrManual: parseFloat(document.getElementById('p_bmrManual').value) || null,
+        diasEntreno: parseInt(document.getElementById('p_dias').value, 10) || DEFAULT_TRAIN_DAYS,
         createdAt: (state.perfil && state.perfil.createdAt) || Date.now(),
         sexo: document.getElementById('p_sexo').value,
         objetivo: document.getElementById('p_objetivo').value
@@ -1352,34 +1369,51 @@
     if(state.isOwner) wireOwnerPanel();
   }
 
-  // ---------- targets ----------
+  // ---------- targets: META CALÓRICA FIJA ----------
+  // Kcal_meta = TDEE x (1 - déficit); TDEE = BMR x factor de actividad (días de entreno por semana).
+  // El ejercicio registrado cada día NO modifica kcal ni macros.
+  function deficitFor(p, dias){
+    if(p.objetivo === 'bajar' || p.objetivo === 'recomp') return dias >= 4 ? 0.20 : 0.15;
+    if(p.objetivo === 'ganar') return -0.10; // superávit del 10%
+    return 0; // mantener
+  }
+  function deficitLabel(d){
+    if(d > 0) return 'déficit '+Math.round(d*100)+'%';
+    if(d < 0) return 'superávit '+Math.round(-d*100)+'%';
+    return 'sin déficit';
+  }
+
   function computeTargets(p, burnHoy){
     var bmrFormula = p.sexo==='hombre'
       ? (10*p.peso + 6.25*p.estatura - 5*p.edad + 5)
       : (10*p.peso + 6.25*p.estatura - 5*p.edad - 161);
     var bmr = (p.bmrManual && p.bmrManual > 0) ? p.bmrManual : bmrFormula;
     var bmrFuente = (p.bmrManual && p.bmrManual > 0) ? 'báscula' : 'fórmula';
-    var baseTdee = bmr * 1.3;
-    var baseKcal = p.objetivo==='bajar' ? baseTdee-450 : (p.objetivo==='ganar' ? baseTdee+350 : baseTdee);
-    if(baseKcal < 1200) baseKcal = 1200;
 
-    var proteina = p.peso * (p.objetivo==='recomp' ? 2.2 : 2.0);
-    var proteinaKcal = proteina*4;
-    var grasaKcal = baseKcal*0.25;
-    var grasa = grasaKcal/9;
+    var dias = p.diasEntreno || DEFAULT_TRAIN_DAYS;
+    var factor = ACTIVITY_FACTORS[dias] || ACTIVITY_FACTORS[DEFAULT_TRAIN_DAYS];
+    var tdee = bmr * factor;
+    var deficit = deficitFor(p, dias);
 
-    var totalKcal = baseKcal + (burnHoy||0);
-    var carbosKcal = Math.max(totalKcal - proteinaKcal - grasaKcal, 0);
-    var carbos = carbosKcal/4;
+    var kcal = tdee * (1 - deficit);
+    if(kcal < 1200) kcal = 1200;
 
-    return {kcal:totalKcal, baseKcal:baseKcal, burnHoy:burnHoy||0, bmr:bmr, bmrFuente:bmrFuente, proteina:proteina, carbos:carbos, grasa:grasa};
+    var proteina = p.peso * PROTEIN_G_PER_KG;
+    var grasa = p.peso * FAT_G_PER_KG;
+    var carbos = Math.max((kcal - (grasa*9 + proteina*4)) / 4, 0);
+
+    // burnHoy se devuelve solo como dato de bitácora; NO entra en kcal
+    return {kcal:kcal, baseKcal:kcal, burnHoy:burnHoy||0, bmr:bmr, bmrFuente:bmrFuente,
+            tdee:tdee, factor:factor, deficit:deficit, dias:dias,
+            proteina:proteina, carbos:carbos, grasa:grasa};
   }
 
-  function weeksToGoal(p, baseKcal, bmr){
+  function weeksToGoal(p, t){
     if(!p.pesoMeta || p.objetivo==='mantener' || p.objetivo==='recomp') return null;
     var diffKg = p.objetivo==='bajar' ? (p.peso - p.pesoMeta) : (p.pesoMeta - p.peso);
     if(diffKg <= 0) return null;
-    var dailyDelta = p.objetivo==='bajar' ? 450 : 350;
+    var dailyDelta = Math.abs(t.tdee - t.kcal);
+    if(dailyDelta < 50) return null;
     var weeks = (diffKg * 7700) / (dailyDelta * 7);
     return Math.round(weeks);
   }
@@ -1570,8 +1604,7 @@
     var entries = state.log[dateKey];
     if(!entries || !entries.length) return null;
     var totals = sumTotals(entries);
-    var burnStore = loadLocal('macros_burn_v1', {});
-    var targets = computeTargets(state.perfil, burnStore[dateKey] || 0);
+    var targets = computeTargets(state.perfil);
     var proteinPct = targets.proteina ? (totals.proteina/targets.proteina*100) : 0;
     var kcalPct = targets.kcal ? (totals.kcal/targets.kcal*100) : 0;
     var good = proteinPct >= 90 && kcalPct >= 85 && kcalPct <= 115;
@@ -1755,18 +1788,17 @@
 
     var el = document.getElementById('main');
 
-    var proteinGap = Math.max(0, targets.proteina - totals.proteina);
+    // banner amarillo: sugerencia de proteína (sin cantidades exageradas de scoops)
+    var proteinGap = Math.round(targets.proteina - totals.proteina);
     var tipHtml;
-    if(proteinGap > 2){
-      var scoopG = (state.perfil.scoopG) || 24;
-      var scoops = Math.ceil((proteinGap/scoopG)*2)/2;
-      tipHtml = '<div class="proteinTip short">Te faltan <b>'+fmt(proteinGap)+' g</b> de proteína hoy → tómate aprox. <b>'+scoops+' scoop'+(scoops===1?'':'s')+'</b> de proteína en polvo ('+scoopG+' g por scoop).</div>';
+    if(proteinGap > 0){
+      tipHtml = '<div class="proteinTip short">Te faltan <b>'+proteinGap+' g</b> de proteína hoy. Prioriza alimentos como pechuga de pollo, res magra, pescado, huevo o atún en tus comidas. Puedes apoyarte con 1 o 2 scoops de proteína en polvo si lo necesitas.</div>';
     } else {
       tipHtml = '<div class="proteinTip ok">✅ Ya cubriste tu proteína de hoy. No necesitas batido extra.</div>';
     }
 
     var weekday = new Date().getDay();
-    var weeks = weeksToGoal(state.perfil, targets.baseKcal);
+    var weeks = weeksToGoal(state.perfil, targets);
     var weeksNote = weeks ? '<p class="note" style="margin-top:8px;">A tu ritmo actual, estimas llegar a tu peso meta en aprox. <b>'+weeks+' semanas</b>. Es una estimación general, no una promesa — varía según cada cuerpo.</p>' : '';
     var weighIn = nextWeighInInfo();
 
@@ -1782,15 +1814,16 @@
       '<div class="card">' +
         '<h3>¿Cuántas calorías usaste en tu ejercicio de hoy en Titanes?</h3>' +
         '<div class="field"><label>Calorías quemadas hoy — '+WORKOUT_LABEL_BY_WEEKDAY[weekday]+'</label><input id="burnInput" type="number" value="'+burnHoy+'"></div>' +
-        '<p class="note">Ajústalo si tu reloj o banda midió otro número.</p>' +
-        '<p class="note" style="margin-top:6px;">Tu meta de hoy: '+fmt(targets.kcal)+' kcal = base '+fmt(targets.baseKcal)+' + ejercicio '+fmt(targets.burnHoy)+' · metabolismo basal: '+fmt(targets.bmr)+' kcal ('+targets.bmrFuente+')</p>' +
+        '<p class="note">Es solo tu bitácora personal: ajústalo si tu reloj o banda midió otro número. No cambia tu meta ni tus macros.</p>' +
+        '<p style="margin:10px 0 2px; font-weight:700; font-size:15px;">Meta de hoy = '+fmt(targets.kcal)+' kcal (Fija)</p>' +
+        '<p class="note" style="margin-top:2px;">Metabolismo basal '+fmt(targets.bmr)+' kcal ('+targets.bmrFuente+') × actividad '+targets.factor+' ('+targets.dias+' días de entreno por semana) = '+fmt(targets.tdee)+' kcal, con '+deficitLabel(targets.deficit)+'. Es la misma meta de lunes a domingo.</p>' +
         weeksNote +
         tipHtml +
       '</div>' +
       renderStreakCard() +
       '<div class="card">' +
         '<h3>Mis datos</h3>' +
-        '<p class="note">'+escapeHtml(state.perfil.nombre)+' · '+fmt(state.perfil.peso,0)+' kg · '+state.perfil.estatura+' cm · '+state.perfil.edad+' años · objetivo: '+objetivoLabel(state.perfil.objetivo)+'</p>' +
+        '<p class="note">'+escapeHtml(state.perfil.nombre)+' · '+fmt(state.perfil.peso,0)+' kg · '+state.perfil.estatura+' cm · '+state.perfil.edad+' años · '+targets.dias+' días de entreno por semana · objetivo: '+objetivoLabel(state.perfil.objetivo)+'</p>' +
         '<button class="btn btn-ghost" id="editProfileBtn" style="padding:6px 0;">Editar mis datos →</button>' +
       '</div>' +
       '<div class="card" id="historialCard"></div>';
@@ -1818,6 +1851,7 @@
         setProteinScoops(n >= i ? i-1 : i);
       });
     });
+    // el ejercicio solo se guarda en la bitácora; la meta no se recalcula
     document.getElementById('burnInput').addEventListener('change', function(){
       var val = parseFloat(document.getElementById('burnInput').value) || 0;
       saveTodaysBurn(val);
