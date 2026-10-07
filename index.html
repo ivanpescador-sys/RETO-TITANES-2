@@ -663,4 +663,796 @@
     if(searchInput){
       searchInput.addEventListener('input', function(){
         ownerSearchQuery = searchInput.value;
-        var rowsEl =
+        var rowsEl = document.getElementById('memberRows');
+        if(rowsEl){
+          rowsEl.innerHTML = buildMemberRowsHtml(filteredMemberIds());
+          wireMemberRowButtons();
+        }
+      });
+    }
+  }
+
+  function wireMemberRowButtons(){
+    Array.prototype.forEach.call(document.querySelectorAll('.memberPagoOk'), function(btn){
+      btn.addEventListener('click', async function(){
+        var id = btn.getAttribute('data-id');
+        var m = state.miembros[id];
+        if(!state.db) return;
+        if(!m.diaPago){ showToast('Primero define el día de pago con 🗓️.', true); return; }
+        try{ await state.db.doc('miembros/'+id).update({ultimoPago: Date.now()}); }
+        catch(e){ showToast('No se pudo actualizar.', true); }
+      });
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('.memberPagoDia'), function(btn){
+      btn.addEventListener('click', function(){
+        var id = btn.getAttribute('data-id');
+        var m = state.miembros[id];
+        if(!state.db) return;
+        showInlinePrompt({
+          title: 'Día de pago mensual para ' + (m.nombre||'') + ' (1-31)',
+          value: m.diaPago || '',
+          type: 'number',
+          placeholder: 'Ej. 2',
+          onSubmit: async function(val){
+            var dia = parseInt(val, 10);
+            if(!dia || dia<1 || dia>31){ showToast('Escribe un número entre 1 y 31.', true); return; }
+            try{ await state.db.doc('miembros/'+id).update({diaPago: dia, ultimoPago: m.ultimoPago || Date.now()}); }
+            catch(e){ showToast('No se pudo actualizar.', true); }
+          }
+        });
+      });
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('.memberRegen'), function(btn){
+      btn.addEventListener('click', function(){
+        var id = btn.getAttribute('data-id');
+        var m = state.miembros[id];
+        if(!state.db) return;
+        armConfirmButton(btn, '✅', async function(){
+          var nuevo = randomCode();
+          try{
+            await state.db.doc('miembros/'+id).update({codigo: nuevo, dispositivos: []});
+            showToast('Nuevo código para '+(m.nombre||'')+': '+nuevo, false);
+          }catch(e){ showToast('No se pudo actualizar.', true); }
+        });
+      });
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('.memberToggle'), function(btn){
+      btn.addEventListener('click', async function(){
+        var id = btn.getAttribute('data-id');
+        var m = state.miembros[id];
+        if(!state.db) return;
+        try{ await state.db.doc('miembros/'+id).update({activo: !m.activo}); }
+        catch(e){ showToast('No se pudo actualizar.', true); }
+      });
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('.memberShare'), function(btn){
+      btn.addEventListener('click', function(){
+        var id = btn.getAttribute('data-id');
+        var m = state.miembros[id];
+        var link = window.location.href.split('?')[0].split('#')[0];
+        var texto = '💪 RETO TITANES — tu acceso\n\n' +
+          'Hola ' + (m.nombre || '') + ', aquí está tu acceso a la app de macros:\n' + link + '\n\n' +
+          'Tu código: ' + (m.codigo || '');
+        var waUrl = m.telefono ? ('https://wa.me/' + m.telefono.replace(/[^0-9]/g,'') + '?text=' + encodeURIComponent(texto)) : null;
+        showShareBox(m, texto, waUrl);
+      });
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('.memberDelete'), function(btn){
+      btn.addEventListener('click', function(){
+        var id = btn.getAttribute('data-id');
+        var m = state.miembros[id];
+        if(!state.db) return;
+        armConfirmButton(btn, '¿Seguro? 🗑️', async function(){
+          try{
+            await state.db.doc('miembros/'+id).delete();
+            showToast('Eliminado: ' + (m.nombre||''), false);
+          }catch(e){ showToast('No se pudo eliminar.', true); }
+        });
+      });
+    });
+  }
+
+  function renderOwnerPanelIfVisible(){
+    var el = document.getElementById('ownerPanelCard');
+    if(el){ el.outerHTML = renderOwnerPanel(); wireOwnerPanel(); }
+  }
+
+  // ---------- encabezado: nombre + cajita de mensualidad ----------
+  function clearHeaderWho(){
+    document.getElementById('whoName').textContent = '';
+    document.getElementById('payBox').innerHTML = '';
+  }
+  function renderHeaderWho(){
+    var name = (state.perfil && state.perfil.nombre) || (state.myMember && state.myMember.nombre) || '';
+    document.getElementById('whoName').textContent = name;
+    var pagoSt = state.myMember ? paymentStatus(state.myMember) : null;
+    var box = document.getElementById('payBox');
+    if(!pagoSt){ box.innerHTML = ''; return; }
+    var msg;
+    if(pagoSt.overdue){
+      var dv = Math.abs(pagoSt.daysLeft);
+      msg = 'Mensualidad vencida hace ' + dv + ' día' + (dv===1?'':'s');
+    } else if(pagoSt.daysLeft === 0){
+      msg = 'Tu mensualidad vence hoy';
+    } else {
+      msg = 'Tu mensualidad vence en ' + pagoSt.daysLeft + ' día' + (pagoSt.daysLeft===1?'':'s');
+    }
+    box.innerHTML = '<span class="payBox'+((pagoSt.overdue||pagoSt.daysLeft===0)?' due':'')+'">💳 '+msg+'</span>';
+  }
+
+  // ---------- app entry ----------
+  function enterApp(){
+    document.getElementById('gate').classList.add('hidden');
+    document.getElementById('app').classList.remove('hidden');
+    document.getElementById('dateLabel').textContent = new Date().toLocaleDateString('es-MX', {weekday:'long', day:'numeric', month:'long'});
+
+    if(state.isOwner){
+      document.getElementById('ownerGear').style.display = 'inline-block';
+      document.getElementById('ownerGear').addEventListener('click', openOwnerSettings);
+    }
+
+    state.perfil = loadLocal('macros_perfil_v1', null);
+    state.log = loadLocal('macros_log_v1', {});
+    state.cache = loadLocal('macros_food_cache_v1', {});
+    var now = new Date();
+    state.histYear = now.getFullYear();
+    state.histMonth = now.getMonth();
+
+    if(state.isOwner && !state.perfil){ renderOwnerOnly(); } else if(!state.perfil){ renderOnboarding(); }
+    else { renderMain(); }
+  }
+
+  function renderOwnerOnly(){
+    clearHeaderWho();
+    document.getElementById('gaugeRow').innerHTML = '';
+    document.getElementById('main').innerHTML = renderOwnerPanel();
+    wireOwnerPanel();
+  }
+
+  // ---------- onboarding ----------
+  function renderOnboarding(){
+    var el = document.getElementById('main');
+    document.getElementById('gaugeRow').innerHTML = '';
+    clearHeaderWho();
+    var p = state.perfil || {};
+    el.innerHTML =
+      (state.isOwner ? renderOwnerPanel() : '') +
+      '<div class="card">' +
+        '<h3>Antes de empezar</h3>' +
+        (state.isOwner ? '<p class="note" style="margin-top:-4px;">Esto es para llevar tu propio seguimiento de macros (opcional). No es necesario para administrar a tus clientes — eso ya lo tienes arriba, en el panel del entrenador.</p>' : '') +
+        '<div class="field"><label>Tu nombre</label><input id="p_nombre" type="text" value="'+escapeHtml(p.nombre||'')+'"></div>' +
+        '<div class="row2">' +
+          '<div class="field"><label>Peso (kg)</label><input id="p_peso" type="number" value="'+(p.peso||'')+'"></div>' +
+          '<div class="field"><label>Estatura (cm)</label><input id="p_estatura" type="number" value="'+(p.estatura||'')+'"></div>' +
+        '</div>' +
+        '<div class="field"><label>Peso meta (kg, opcional)</label><input id="p_pesoMeta" type="number" value="'+(p.pesoMeta||'')+'"></div>' +
+        '<div class="row2">' +
+          '<div class="field"><label>Gramos de proteína por scoop</label><input id="p_scoopG" type="number" value="'+(p.scoopG||24)+'"></div>' +
+          '<div class="field"><label>Última pesada con tu entrenador (opcional)</label><input id="p_ultimaPesada" type="date" value="'+(p.ultimaPesada||'')+'"></div>' +
+        '</div>' +
+        '<div class="row2">' +
+          '<div class="field"><label>Edad</label><input id="p_edad" type="number" value="'+(p.edad||'')+'"></div>' +
+          '<div class="field"><label>Sexo (para el cálculo)</label><select id="p_sexo">' +
+            '<option value="mujer"'+(p.sexo!=='hombre'?' selected':'')+'>Mujer</option>' +
+            '<option value="hombre"'+(p.sexo==='hombre'?' selected':'')+'>Hombre</option>' +
+          '</select></div>' +
+        '</div>' +
+        '<div class="field"><label>Metabolismo basal medido por tu entrenador (kcal/d, opcional)</label><input id="p_bmrManual" type="number" placeholder="Déjalo en blanco si no lo tienes" value="'+(p.bmrManual||'')+'"></div>' +
+        '<p class="note" style="margin:-6px 0 12px;">Si tu entrenador te dio este dato con su báscula de bioimpedancia, tus calorías y macros se calculan con ese número real en vez de la fórmula estimada.</p>' +
+        '<div class="field"><label>Objetivo</label><select id="p_objetivo">' +
+          '<option value="bajar"'+(p.objetivo==='bajar'||!p.objetivo?' selected':'')+'>Bajar de peso</option>' +
+          '<option value="ganar"'+(p.objetivo==='ganar'?' selected':'')+'>Ganar masa muscular</option>' +
+          '<option value="mantener"'+(p.objetivo==='mantener'?' selected':'')+'>Mantenerme</option>' +
+          '<option value="recomp"'+(p.objetivo==='recomp'?' selected':'')+'>Recomposición (perder grasa y ganar músculo)</option>' +
+        '</select></div>' +
+        '<button class="btn btn-primary" id="saveOnboard" style="width:100%; margin-top:6px;">Calcular mis macros</button>' +
+        '<p class="note" style="margin-top:10px;">Tus datos se guardan solo en este celular, no en un servidor.</p>' +
+      '</div>';
+
+    document.getElementById('saveOnboard').addEventListener('click', function(){
+      var nombre = document.getElementById('p_nombre').value.trim();
+      var peso = parseFloat(document.getElementById('p_peso').value);
+      var estatura = parseFloat(document.getElementById('p_estatura').value);
+      var edad = parseFloat(document.getElementById('p_edad').value);
+      if(!nombre || !peso || !estatura || !edad){ showToast('Completa todos los campos.', true); return; }
+      state.perfil = {
+        nombre:nombre, peso:peso, estatura:estatura, edad:edad,
+        pesoMeta: parseFloat(document.getElementById('p_pesoMeta').value) || null,
+        scoopG: parseFloat(document.getElementById('p_scoopG').value) || 24,
+        ultimaPesada: document.getElementById('p_ultimaPesada').value || null,
+        bmrManual: parseFloat(document.getElementById('p_bmrManual').value) || null,
+        createdAt: (state.perfil && state.perfil.createdAt) || Date.now(),
+        sexo: document.getElementById('p_sexo').value,
+        objetivo: document.getElementById('p_objetivo').value
+      };
+      saveLocal('macros_perfil_v1', state.perfil);
+      renderMain();
+    });
+    if(state.isOwner) wireOwnerPanel();
+  }
+
+  // ---------- targets ----------
+  function computeTargets(p, burnHoy){
+    var bmrFormula = p.sexo==='hombre'
+      ? (10*p.peso + 6.25*p.estatura - 5*p.edad + 5)
+      : (10*p.peso + 6.25*p.estatura - 5*p.edad - 161);
+    var bmr = (p.bmrManual && p.bmrManual > 0) ? p.bmrManual : bmrFormula;
+    var bmrFuente = (p.bmrManual && p.bmrManual > 0) ? 'báscula' : 'fórmula';
+    var baseTdee = bmr * 1.3;
+    var baseKcal = p.objetivo==='bajar' ? baseTdee-450 : (p.objetivo==='ganar' ? baseTdee+350 : baseTdee);
+    if(baseKcal < 1200) baseKcal = 1200;
+
+    var proteina = p.peso * (p.objetivo==='recomp' ? 2.2 : 2.0);
+    var proteinaKcal = proteina*4;
+    var grasaKcal = baseKcal*0.25;
+    var grasa = grasaKcal/9;
+
+    var totalKcal = baseKcal + (burnHoy||0);
+    var carbosKcal = Math.max(totalKcal - proteinaKcal - grasaKcal, 0);
+    var carbos = carbosKcal/4;
+
+    return {kcal:totalKcal, baseKcal:baseKcal, burnHoy:burnHoy||0, bmr:bmr, bmrFuente:bmrFuente, proteina:proteina, carbos:carbos, grasa:grasa};
+  }
+
+  function weeksToGoal(p, baseKcal, bmr){
+    if(!p.pesoMeta || p.objetivo==='mantener' || p.objetivo==='recomp') return null;
+    var diffKg = p.objetivo==='bajar' ? (p.peso - p.pesoMeta) : (p.pesoMeta - p.peso);
+    if(diffKg <= 0) return null;
+    var dailyDelta = p.objetivo==='bajar' ? 450 : 350;
+    var weeks = (diffKg * 7700) / (dailyDelta * 7);
+    return Math.round(weeks);
+  }
+
+  // ---------- gauges ----------
+  function gaugeSvg(pctRaw, color){
+    var pct = Math.max(0, Math.min(100, pctRaw));
+    var over = pctRaw > 100;
+    return '<svg viewBox="0 0 120 70" class="gaugeSvg">' +
+      '<path d="M10,65 A50,50 0 0 1 110,65" fill="none" stroke="#E8E6DA" stroke-width="10" stroke-linecap="round" pathLength="100"></path>' +
+      '<path d="M10,65 A50,50 0 0 1 110,65" fill="none" stroke="'+(over?'#D6381E':color)+'" stroke-width="10" stroke-linecap="round" pathLength="100" stroke-dasharray="'+pct+' 100"></path>' +
+      '<text x="60" y="50" text-anchor="middle" font-family="Big Shoulders Display" font-weight="700" font-size="18" fill="#111111">'+Math.round(pctRaw)+'%</text>' +
+    '</svg>';
+  }
+
+  function renderGauges(totals, targets){
+    var items = [
+      {label:'Proteína', hexColor:'#111111', cur:totals.proteina, tgt:targets.proteina, unit:'g'},
+      {label:'Carbos', hexColor:'#FFC400', cur:totals.carbos, tgt:targets.carbos, unit:'g'},
+      {label:'Grasas', hexColor:'#B58900', cur:totals.grasa, tgt:targets.grasa, unit:'g'}
+    ];
+    var html = '';
+    items.forEach(function(it){
+      var pct = it.tgt ? (it.cur/it.tgt*100) : 0;
+      html += '<div class="gaugeItem">' + gaugeSvg(pct, it.hexColor) +
+        '<div class="gaugeLabel">'+it.label+'</div>' +
+        '<div class="gaugeSub">'+fmt(it.cur)+' / '+fmt(it.tgt)+it.unit+'</div>' +
+      '</div>';
+    });
+    document.getElementById('gaugeRow').innerHTML = html;
+  }
+
+  // ---------- main ----------
+  function todaysEntries(){
+    return state.log[todayKey()] || [];
+  }
+  function saveLog(){ saveLocal('macros_log_v1', state.log); }
+  function saveCache(){ saveLocal('macros_food_cache_v1', state.cache); }
+
+  function sumTotals(entries){
+    var t = {kcal:0, proteina:0, carbos:0, grasa:0};
+    entries.forEach(function(e){
+      t.kcal += e.kcal||0; t.proteina += e.proteina||0; t.carbos += e.carbos||0; t.grasa += e.grasa||0;
+    });
+    return t;
+  }
+
+  function findFood(nombre){
+    var key = nombre.trim().toLowerCase();
+    if(DEFAULT_FOODS[key]) return DEFAULT_FOODS[key];
+    if(state.cache[key]) return state.cache[key];
+    return null;
+  }
+
+  function todaysBurn(){
+    var stored = loadLocal('macros_burn_v1', {});
+    var key = todayKey();
+    if(stored[key] != null) return stored[key];
+    return WORKOUT_KCAL_BY_WEEKDAY[new Date().getDay()] || 0;
+  }
+  function saveTodaysBurn(val){
+    var stored = loadLocal('macros_burn_v1', {});
+    stored[todayKey()] = val;
+    saveLocal('macros_burn_v1', stored);
+  }
+
+  // ---------- racha e insignias ----------
+  function computeStreaks(){
+    var todayComp = dayCompliance(todayKey());
+    var d = new Date();
+    if(!todayComp) d.setDate(d.getDate()-1);
+    var current = 0, checking = true;
+    while(checking){
+      var key = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+      var comp = dayCompliance(key);
+      if(comp && comp.good){ current++; d.setDate(d.getDate()-1); }
+      else checking = false;
+    }
+    var dates = Object.keys(state.log).sort();
+    var best=0, run=0, prevKey=null;
+    dates.forEach(function(key){
+      var comp = dayCompliance(key);
+      if(comp && comp.good){
+        if(prevKey){
+          var diffDays = Math.round((new Date(key)-new Date(prevKey))/86400000);
+          run = diffDays===1 ? run+1 : 1;
+        } else run = 1;
+        if(run>best) best = run;
+        prevKey = key;
+      } else { run=0; prevKey=null; }
+    });
+    best = Math.max(best, current);
+    return {current:current, best:best};
+  }
+
+  function renderStreakCard(){
+    var st = computeStreaks();
+    var milestones = [{d:3,ic:'🥉'},{d:7,ic:'🥈'},{d:14,ic:'🥇'},{d:30,ic:'🏆'},{d:60,ic:'💎'},{d:90,ic:'👑'}];
+    var badges = milestones.map(function(m){
+      return '<div class="badge'+(st.best>=m.d?' on':'')+'"><div class="ic">'+m.ic+'</div><div class="lb">'+m.d+'d</div></div>';
+    }).join('');
+    return '<div class="card">' +
+      '<h3>Tu racha 🔥</h3>' +
+      '<div class="streakRow"><div class="streakNum">'+st.current+'</div><div class="streakLabel">día'+(st.current===1?'':'s')+' seguido'+(st.current===1?'':'s')+' cumpliendo tu meta de proteína<br>Mejor racha: '+st.best+' días</div></div>' +
+      '<div class="badgeRow">'+badges+'</div>' +
+    '</div>';
+  }
+
+  // ---------- suplementos de hoy: creatina y scoop de proteína ----------
+  var PROTEIN_SCOOP_FOOD = {
+    nombre: 'Proteína en polvo (1 scoop, 35g)',
+    kcal: 109.72, proteina: 26.02, carbos: 1.14, grasa: 0.12
+  };
+
+  function todaysCreatina(){
+    var stored = loadLocal('macros_creatina_v1', {});
+    return !!stored[todayKey()];
+  }
+  function toggleCreatina(){
+    var stored = loadLocal('macros_creatina_v1', {});
+    var key = todayKey();
+    stored[key] = !stored[key];
+    saveLocal('macros_creatina_v1', stored);
+    renderMain();
+  }
+
+  function scoopsToday(){
+    var n = 0;
+    todaysEntries().forEach(function(e){ if(e.nombre === PROTEIN_SCOOP_FOOD.nombre) n = e.cantidad || 1; });
+    return n;
+  }
+  function hasProteinScoopToday(){ return scoopsToday() > 0; }
+  function setProteinScoops(n){
+    var entries = todaysEntries().filter(function(e){ return e.nombre !== PROTEIN_SCOOP_FOOD.nombre; });
+    if(n > 0){
+      entries.push({
+        nombre: PROTEIN_SCOOP_FOOD.nombre, cantidad: n,
+        kcal: PROTEIN_SCOOP_FOOD.kcal*n, proteina: PROTEIN_SCOOP_FOOD.proteina*n,
+        carbos: PROTEIN_SCOOP_FOOD.carbos*n, grasa: PROTEIN_SCOOP_FOOD.grasa*n
+      });
+    }
+    state.log[todayKey()] = entries;
+    saveLog();
+    renderMain();
+  }
+  function creatinaDosis(){
+    var kg = state.perfil && state.perfil.peso;
+    return kg ? Math.round(kg*0.07*10)/10 : null;
+  }
+
+  function renderSupplementsCard(){
+    var cre = todaysCreatina();
+    var n = scoopsToday();
+    var dosis = creatinaDosis();
+    var btns = [1,2,3].map(function(i){
+      var on = (n === i);
+      return '<button class="btn scoopOpt" data-n="'+i+'" style="padding:8px 14px; margin-left:6px;'+(on?' background:var(--y); border-color:#111; color:#111; font-weight:700;':'')+'">'+i+'</button>';
+    }).join('');
+    return '<div class="card">' +
+      '<h3>Suplementos de hoy</h3>' +
+      '<div class="checkRow"><span>Creatina: <b>'+(dosis!=null?fmt(dosis,1):'—')+' g</b> hoy</span><button class="checkBtn" id="creatinaBtn">'+(cre?'✅':'◻️')+'</button></div>' +
+      '<div class="checkRow"><span>Proteína en polvo (scoops de 35 g)</span><span>'+btns+'</span></div>' +
+      '<p class="note" style="margin-top:8px;">Cada scoop suma '+fmt(PROTEIN_SCOOP_FOOD.kcal)+' kcal, '+fmt(PROTEIN_SCOOP_FOOD.proteina)+'g proteína, '+fmt(PROTEIN_SCOOP_FOOD.carbos)+'g carbos y '+fmt(PROTEIN_SCOOP_FOOD.grasa)+'g grasa a tus macros de hoy. Toca de nuevo el número activo para quitarlo. La creatina se calcula con 0.07 g por kg de tu peso.</p>' +
+    '</div>';
+  }
+
+  // ---------- pago mensual ----------
+  function clampDay(year, monthIndex, day){
+    var last = new Date(year, monthIndex+1, 0).getDate();
+    return Math.min(day, last);
+  }
+  function nextPaymentDate(m){
+    if(!m.diaPago) return null;
+    var base = new Date(m.ultimoPago || m.creadoEn || Date.now());
+    var y = base.getFullYear(), mo = base.getMonth()+1;
+    return new Date(y, mo, clampDay(y, mo, m.diaPago));
+  }
+  function paymentStatus(m){
+    var due = nextPaymentDate(m);
+    if(!due) return null;
+    var days = Math.ceil((due - new Date()) / 86400000);
+    return {due:due, daysLeft:days, overdue: days < 0};
+  }
+  function paymentBadgeHtml(m){
+    var st = paymentStatus(m);
+    if(!st) return '<span class="note">sin día de pago</span>';
+    if(st.overdue) return '<span class="tag" style="color:var(--warn); border-color:var(--warn);">Vencido hace '+Math.abs(st.daysLeft)+' día'+(Math.abs(st.daysLeft)===1?'':'s')+' ⚠️</span>';
+    if(st.daysLeft === 0) return '<span class="tag" style="color:var(--fat); border-color:var(--fat);">Vence hoy</span>';
+    return '<span class="note">Vence en '+st.daysLeft+' día'+(st.daysLeft===1?'':'s')+'</span>';
+  }
+
+  // ---------- próxima pesada con el entrenador ----------
+  function nextWeighInInfo(){
+    var p = state.perfil;
+    var anchor = p.ultimaPesada ? new Date(p.ultimaPesada+'T00:00:00').getTime() : (p.createdAt || Date.now());
+    var daysSince = Math.floor((Date.now()-anchor)/86400000);
+    if(daysSince >= 30) return {due:true, msg:'Ya te toca pesarte con tu entrenador — llevas '+daysSince+' días desde tu última pesada.'};
+    return {due:false, msg:'Tu próxima pesada con tu entrenador es en aprox. '+(30-daysSince)+' días.'};
+  }
+
+  // ---------- historial mensual / anual ----------
+  var MESES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+  var DOW = ['D','L','M','M','J','V','S'];
+
+  function dateKeyFor(y,m,d){
+    return y+'-'+String(m+1).padStart(2,'0')+'-'+String(d).padStart(2,'0');
+  }
+
+  function dayCompliance(dateKey){
+    var entries = state.log[dateKey];
+    if(!entries || !entries.length) return null;
+    var totals = sumTotals(entries);
+    var burnStore = loadLocal('macros_burn_v1', {});
+    var targets = computeTargets(state.perfil, burnStore[dateKey] || 0);
+    var proteinPct = targets.proteina ? (totals.proteina/targets.proteina*100) : 0;
+    var kcalPct = targets.kcal ? (totals.kcal/targets.kcal*100) : 0;
+    var good = proteinPct >= 90 && kcalPct >= 85 && kcalPct <= 115;
+    return {totals:totals, targets:targets, proteinPct:proteinPct, kcalPct:kcalPct, good:good};
+  }
+
+  function renderCalendar(year, month){
+    var first = new Date(year, month, 1);
+    var daysInMonth = new Date(year, month+1, 0).getDate();
+    var startDow = first.getDay();
+    var html = DOW.map(function(d){ return '<div class="calDow">'+d+'</div>'; }).join('');
+    for(var i=0;i<startDow;i++) html += '<div class="calCell empty"></div>';
+    var goodCount=0, partialCount=0, loggedCount=0;
+    for(var d=1; d<=daysInMonth; d++){
+      var key = dateKeyFor(year,month,d);
+      var comp = dayCompliance(key);
+      var cls = 'calCell';
+      if(comp){ loggedCount++; cls += comp.good ? ' good' : ' partial'; if(comp.good) goodCount++; else partialCount++; }
+      html += '<div class="'+cls+'">'+d+'</div>';
+    }
+    return {html:html, goodCount:goodCount, partialCount:partialCount, loggedCount:loggedCount, daysInMonth:daysInMonth};
+  }
+
+  function buildPctTrendChart(year, month){
+    var daysInMonth = new Date(year, month+1, 0).getDate();
+    var points = [];
+    for(var d=1; d<=daysInMonth; d++){
+      var comp = dayCompliance(dateKeyFor(year,month,d));
+      points.push(comp ? {kcal:comp.kcalPct, proteina:comp.proteinPct, carbos:(comp.totals.carbos/comp.targets.carbos*100)||0, grasa:(comp.totals.grasa/comp.targets.grasa*100)||0} : null);
+    }
+    var withData = points.filter(function(p){return p;});
+    if(withData.length < 2){
+      return '<p class="note">Con al menos dos días registrados en el mes aparecerá aquí la gráfica de cumplimiento.</p>';
+    }
+    var n = points.length;
+    var W = Math.max(340, n*22), H = 150, padTop=10, padBottom=18, padX=8;
+    var innerH = H-padTop-padBottom;
+    var stepX = (W-padX*2)/(n-1);
+    var maxPct = 150;
+    function yFor(pct){ return padTop + (1-Math.min(pct,maxPct)/maxPct)*innerH; }
+
+    var refY = yFor(100);
+    var svg = '<line x1="'+padX+'" y1="'+refY.toFixed(1)+'" x2="'+(W-padX)+'" y2="'+refY.toFixed(1)+'" stroke="#CFCDC0" stroke-width="1" stroke-dasharray="3,3"></line>';
+
+    var series = [
+      {key:'proteina', color:'#111111', label:'Proteína'},
+      {key:'carbos', color:'#FFC400', label:'Carbos'},
+      {key:'grasa', color:'#B58900', label:'Grasas'}
+    ];
+    var legend = '';
+    series.forEach(function(ser){
+      var path='', open=false, dots='';
+      points.forEach(function(p,i){
+        var x = padX+i*stepX;
+        if(!p){ open=false; return; }
+        var y = yFor(p[ser.key]);
+        path += (open?'L':'M')+x.toFixed(1)+','+y.toFixed(1)+' ';
+        open=true;
+        dots += '<circle cx="'+x.toFixed(1)+'" cy="'+y.toFixed(1)+'" r="2" fill="'+ser.color+'"></circle>';
+      });
+      svg += '<path d="'+path.trim()+'" fill="none" stroke="'+ser.color+'" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path>'+dots;
+      legend += '<span><i style="background:'+ser.color+';"></i>'+ser.label+'</span>';
+    });
+    var svgWrap = '<svg viewBox="0 0 '+W+' '+H+'" width="'+W+'" height="'+H+'" xmlns="http://www.w3.org/2000/svg">'+svg+'</svg>';
+    return '<div class="trendScroll">'+svgWrap+'</div><div class="trendLegend">'+legend+'<span><i style="background:#CFCDC0;"></i>línea = 100% de tu meta</span></div>';
+  }
+
+  function renderYearStrip(year){
+    var html = '';
+    for(var m=0;m<12;m++){
+      var daysInMonth = new Date(year, m+1, 0).getDate();
+      var sum=0, count=0;
+      for(var d=1; d<=daysInMonth; d++){
+        var comp = dayCompliance(dateKeyFor(year,m,d));
+        if(comp){ sum += comp.proteinPct; count++; }
+      }
+      var avg = count ? Math.min(100, sum/count) : 0;
+      html += '<div class="yearCell"><div class="yearBar"><i style="height:'+avg+'%;"></i></div><div class="m">'+MESES[m].slice(0,1).toUpperCase()+'</div></div>';
+    }
+    return html;
+  }
+
+  function renderWeekSummary(){
+    var today = new Date();
+    var dow = today.getDay();
+    var mondayOffset = dow===0 ? -6 : 1-dow;
+    var monday = new Date(today); monday.setDate(today.getDate()+mondayOffset);
+    var html = '', goodCount=0, loggedCount=0;
+    var labels = ['L','M','M','J','V','S','D'];
+    for(var i=0;i<7;i++){
+      var d = new Date(monday); d.setDate(monday.getDate()+i);
+      var key = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+      var comp = dayCompliance(key);
+      var cls = 'calCell';
+      if(comp){ loggedCount++; cls += comp.good ? ' good' : ' partial'; if(comp.good) goodCount++; }
+      if(d > today) cls = 'calCell empty';
+      html += '<div class="'+cls+'">'+d.getDate()+'</div>';
+    }
+    var dowRow = labels.map(function(l){ return '<div class="calDow">'+l+'</div>'; }).join('');
+    return '<h3>Esta semana</h3>' +
+      '<div class="weekGrid">'+dowRow+'</div>' +
+      '<div class="weekGrid">'+html+'</div>' +
+      '<div class="histStats">' +
+        '<div class="histStat"><div class="n">'+goodCount+'/7</div><div class="l">días cumplidos</div></div>' +
+        '<div class="histStat"><div class="n">'+loggedCount+'/7</div><div class="l">días registrados</div></div>' +
+      '</div>';
+  }
+
+  function renderHistorial(){
+    var year = state.histYear, month = state.histMonth;
+    var cal = renderCalendar(year, month);
+    var el = document.getElementById('historialCard');
+    if(!el) return;
+    el.innerHTML =
+      renderWeekSummary() +
+      '<h3 style="margin-top:18px;">Historial mensual</h3>' +
+      '<div class="histNav">' +
+        '<button class="navBtn" id="histPrev">‹</button>' +
+        '<span class="monthLabel">'+MESES[month]+' '+year+'</span>' +
+        '<button class="navBtn" id="histNext">›</button>' +
+      '</div>' +
+      '<div class="calGrid">'+cal.html+'</div>' +
+      '<div class="calLegend">' +
+        '<span><i style="background:var(--y); border:1px solid #111;"></i>Cumplió</span>' +
+        '<span><i style="background:var(--carb-soft); border:1px solid var(--y);"></i>Registró pero no llegó</span>' +
+        '<span><i style="background:var(--panel-2); border:1px solid var(--line);"></i>Sin registro</span>' +
+      '</div>' +
+      '<div class="histStats">' +
+        '<div class="histStat"><div class="n">'+cal.goodCount+'/'+cal.daysInMonth+'</div><div class="l">días cumplidos</div></div>' +
+        '<div class="histStat"><div class="n">'+cal.loggedCount+'/'+cal.daysInMonth+'</div><div class="l">días registrados</div></div>' +
+      '</div>' +
+      '<h3 style="margin-top:6px;">% de tu meta por día</h3>' +
+      buildPctTrendChart(year, month) +
+      '<h3 style="margin-top:16px;">Vista anual (proteína promedio)</h3>' +
+      '<div class="yearStrip">' + renderYearStrip(year) + '</div>' +
+      '<p class="note" style="margin-top:8px;">Los objetivos usados para días pasados son los que tienes configurados ahora mismo; si cambiaste tu peso u objetivo a mitad de mes, los días anteriores se comparan contra tu meta actual, no la de ese momento.</p>';
+
+    document.getElementById('histPrev').addEventListener('click', function(){
+      state.histMonth--; if(state.histMonth<0){ state.histMonth=11; state.histYear--; }
+      renderHistorial();
+    });
+    document.getElementById('histNext').addEventListener('click', function(){
+      state.histMonth++; if(state.histMonth>11){ state.histMonth=0; state.histYear++; }
+      renderHistorial();
+    });
+  }
+
+  // ---------- tarjetas de comidas ----------
+  function mealOf(e){ return e.comida || 'comida'; }
+
+  function renderMealCard(meal, entries){
+    var rows = '';
+    entries.forEach(function(e, i){
+      if(e.nombre === PROTEIN_SCOOP_FOOD.nombre) return;
+      if(mealOf(e) !== meal.k) return;
+      rows += '<div class="foodRow">' +
+        '<span class="fname">'+escapeHtml(e.nombre)+(e.cantidad!==1?' ×'+e.cantidad:'')+'</span>' +
+        '<span class="fmacros">'+fmt(e.kcal)+' kcal · '+fmt(e.proteina)+'g P</span>' +
+        '<button class="fdel" data-i="'+i+'">✕</button>' +
+      '</div>';
+    });
+    return '<div class="card meal">' +
+      '<h3>'+meal.l+'</h3>' +
+      '<div>' + (rows || '<p class="note">Nada capturado todavía.</p>') + '</div>' +
+      '<div class="addRow">' +
+        '<div class="field"><label>¿Qué comiste?</label><input id="food_'+meal.k+'" list="foodOptions" placeholder="Ej. chilaquiles verdes con pollo" autocomplete="off"></div>' +
+        '<div class="field qtyField"><label>Cant.</label><input id="qty_'+meal.k+'" type="number" value="1" min="0.25" step="0.25"></div>' +
+      '</div>' +
+      '<button class="btn btn-primary addFoodBtn" data-meal="'+meal.k+'" style="width:100%; margin-top:8px;">Agregar</button>' +
+      '<div class="estArea" id="est_'+meal.k+'"></div>' +
+    '</div>';
+  }
+
+  function renderMain(){
+    var burnHoy = todaysBurn();
+    var targets = computeTargets(state.perfil, burnHoy);
+    var entries = todaysEntries();
+    var totals = sumTotals(entries);
+    renderGauges(totals, targets);
+    renderHeaderWho();
+
+    var el = document.getElementById('main');
+
+    var proteinGap = Math.max(0, targets.proteina - totals.proteina);
+    var tipHtml;
+    if(proteinGap > 2){
+      var scoopG = (state.perfil.scoopG) || 24;
+      var scoops = Math.ceil((proteinGap/scoopG)*2)/2;
+      tipHtml = '<div class="proteinTip short">Te faltan <b>'+fmt(proteinGap)+' g</b> de proteína hoy → tómate aprox. <b>'+scoops+' scoop'+(scoops===1?'':'s')+'</b> de proteína en polvo ('+scoopG+' g por scoop).</div>';
+    } else {
+      tipHtml = '<div class="proteinTip ok">✅ Ya cubriste tu proteína de hoy. No necesitas batido extra.</div>';
+    }
+
+    var weekday = new Date().getDay();
+    var weeks = weeksToGoal(state.perfil, targets.baseKcal);
+    var weeksNote = weeks ? '<p class="note" style="margin-top:8px;">A tu ritmo actual, estimas llegar a tu peso meta en aprox. <b>'+weeks+' semanas</b>. Es una estimación general, no una promesa — varía según cada cuerpo.</p>' : '';
+    var weighIn = nextWeighInInfo();
+
+    var datalist = '<datalist id="foodOptions">' + Object.keys(DEFAULT_FOODS).concat(Object.keys(state.cache)).map(function(k){ return '<option value="'+escapeHtml(k)+'">'; }).join('') + '</datalist>';
+    var mealsHtml = MEALS.map(function(m){ return renderMealCard(m, entries); }).join('');
+
+    el.innerHTML =
+      (state.isOwner ? renderOwnerPanel() : '') +
+      renderSupplementsCard() +
+      '<div class="weighNote'+(weighIn.due?' due':'')+'">⚖️ ' + weighIn.msg + '</div>' +
+      datalist +
+      mealsHtml +
+      '<div class="card">' +
+        '<h3>¿Cuántas calorías usaste hoy?</h3>' +
+        '<div style="font-family:\'Big Shoulders Display\'; font-weight:700; font-size:30px;">' + fmt(totals.kcal) + ' <span style="font-size:15px; color:var(--text-muted); font-family:\'Work Sans\';">/ ' + fmt(targets.kcal) + ' kcal</span></div>' +
+        '<p class="note" style="margin-top:4px;">Base: '+fmt(targets.baseKcal)+' kcal + entreno de hoy: '+fmt(targets.burnHoy)+' kcal · metabolismo basal: '+fmt(targets.bmr)+' kcal ('+targets.bmrFuente+')</p>' +
+        '<div class="field" style="margin-top:10px;"><label>¿Cuántas calorías quemaste el día de hoy? — '+WORKOUT_LABEL_BY_WEEKDAY[weekday]+'</label><input id="burnInput" type="number" value="'+burnHoy+'"></div>' +
+        '<p class="note">Ajústalo si tu reloj o banda midió otro número.</p>' +
+        weeksNote +
+        tipHtml +
+      '</div>' +
+      renderStreakCard() +
+      '<div class="card">' +
+        '<h3>Mis datos</h3>' +
+        '<p class="note">'+escapeHtml(state.perfil.nombre)+' · '+fmt(state.perfil.peso,0)+' kg · '+state.perfil.estatura+' cm · '+state.perfil.edad+' años · objetivo: '+objetivoLabel(state.perfil.objetivo)+'</p>' +
+        '<button class="btn btn-ghost" id="editProfileBtn" style="padding:6px 0;">Editar mis datos →</button>' +
+      '</div>' +
+      '<div class="card" id="historialCard"></div>';
+
+    if(state.isOwner) wireOwnerPanel();
+    document.getElementById('editProfileBtn').addEventListener('click', renderOnboarding);
+    Array.prototype.forEach.call(document.querySelectorAll('.addFoodBtn'), function(b){
+      b.addEventListener('click', function(){ handleAddFood(b.getAttribute('data-meal')); });
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('.fdel'), function(btn){
+      btn.addEventListener('click', function(){
+        var i = parseInt(btn.getAttribute('data-i'), 10);
+        var entries2 = todaysEntries();
+        entries2.splice(i,1);
+        state.log[todayKey()] = entries2;
+        saveLog();
+        renderMain();
+      });
+    });
+    document.getElementById('creatinaBtn').addEventListener('click', toggleCreatina);
+    Array.prototype.forEach.call(document.querySelectorAll('.scoopOpt'), function(b){
+      b.addEventListener('click', function(){
+        var n = parseInt(b.getAttribute('data-n'), 10);
+        setProteinScoops(scoopsToday() === n ? 0 : n);
+      });
+    });
+    document.getElementById('burnInput').addEventListener('change', function(){
+      var val = parseFloat(document.getElementById('burnInput').value) || 0;
+      saveTodaysBurn(val);
+      renderMain();
+    });
+    renderHistorial();
+  }
+
+  function objetivoLabel(o){ return o==='bajar' ? 'bajar de peso' : o==='ganar' ? 'ganar masa muscular' : o==='recomp' ? 'recomposición corporal' : 'mantenerme'; }
+
+  function addEntry(nombre, cantidad, per, meal){
+    var entries = todaysEntries();
+    entries.push({
+      nombre: nombre, cantidad: cantidad, comida: meal || 'comida',
+      kcal: (per.kcal||0)*cantidad, proteina: (per.proteina||0)*cantidad,
+      carbos: (per.carbos||0)*cantidad, grasa: (per.grasa||0)*cantidad
+    });
+    state.log[todayKey()] = entries;
+    saveLog();
+    renderMain();
+  }
+
+  async function handleAddFood(meal){
+    var nombre = (document.getElementById('food_'+meal).value || '').trim();
+    var cantidad = parseFloat(document.getElementById('qty_'+meal).value) || 1;
+    if(!nombre) return;
+    var per = findFood(nombre);
+    if(per){ addEntry(nombre, cantidad, per, meal); return; }
+
+    Array.prototype.forEach.call(document.querySelectorAll('.estArea'), function(a){ a.innerHTML = ''; });
+    var area = document.getElementById('est_'+meal);
+    area.innerHTML = '<p class="note" style="margin-top:10px;">🤖 Consultando la IA sobre "'+escapeHtml(nombre)+'"…</p>';
+
+    var est = null;
+    try{
+      var res = await fetch('/api/gemini', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          prompt: 'Da SOLO un JSON sin texto adicional ni bloques de código con esta forma exacta: {"kcal":numero,"proteina":numero,"carbos":numero,"grasa":numero}. ' +
+                  'Estima el aporte nutrimental de UNA porción casera típica mexicana de: "' + nombre + '". ' +
+                  'proteina, carbos y grasa en gramos; kcal totales de esa porción.'
+        })
+      });
+      var data = await res.json();
+      if(data && data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts && data.candidates[0].content.parts[0]){
+        var texto = data.candidates[0].content.parts[0].text || '';
+        texto = texto.replace(/```json/g,'').replace(/```/g,'').trim();
+        var parsed = JSON.parse(texto);
+        if(parsed && typeof parsed.kcal === 'number') est = parsed;
+      }
+    }catch(e){ est = null; }
+
+    if(est){
+      showEstimateForm(nombre, cantidad, est, meal);
+      return;
+    }
+
+    showEstimateForm(nombre, cantidad, {kcal:'', proteina:'', carbos:'', grasa:''}, meal);
+  }
+
+  function showEstimateForm(nombre, cantidad, est, meal){
+    var area = document.getElementById('est_'+meal);
+    area.innerHTML =
+      '<div class="estimateBox">' +
+        '<p class="note" style="margin:0 0 8px;">No estaba en la lista — revisa o completa los macros de "'+escapeHtml(nombre)+'" (por porción):</p>' +
+        '<div class="row2">' +
+          '<div class="field"><label>Kcal</label><input id="e_kcal" type="number" value="'+est.kcal+'"></div>' +
+          '<div class="field"><label>Proteína (g)</label><input id="e_proteina" type="number" value="'+est.proteina+'"></div>' +
+        '</div>' +
+        '<div class="row2">' +
+          '<div class="field"><label>Carbos (g)</label><input id="e_carbos" type="number" value="'+est.carbos+'"></div>' +
+          '<div class="field"><label>Grasa (g)</label><input id="e_grasa" type="number" value="'+est.grasa+'"></div>' +
+        '</div>' +
+        '<label style="display:flex; align-items:center; gap:6px; font-size:12.5px; margin-bottom:10px;"><input type="checkbox" id="e_save" checked style="width:auto;"> Guardar en mi lista para la próxima vez</label>' +
+        '<button class="btn btn-primary" id="e_confirm" style="width:100%;">Agregar</button>' +
+      '</div>';
+    document.getElementById('e_confirm').addEventListener('click', function(){
+      var per = {
+        kcal: parseFloat(document.getElementById('e_kcal').value)||0,
+        proteina: parseFloat(document.getElementById('e_proteina').value)||0,
+        carbos: parseFloat(document.getElementById('e_carbos').value)||0,
+        grasa: parseFloat(document.getElementById('e_grasa').value)||0
+      };
+      if(document.getElementById('e_save').checked){
+        state.cache[nombre.trim().toLowerCase()] = per;
+        saveCache();
+      }
+      addEntry(nombre, cantidad, per, meal);
+    });
+  }
+
+  initGate();
+})();
+</script>
+</body>
+</html>
