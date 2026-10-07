@@ -33,6 +33,7 @@
     border:1px solid var(--line); border-radius:8px; padding:9px 10px; width:100%;
   }
   label{display:block; font-size:12.5px; color:var(--text-muted); margin-bottom:4px;}
+  a{color:#111; font-weight:600;}
   .field{margin-bottom:12px;}
   .row2{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
   button.btn{
@@ -42,6 +43,7 @@
   button.btn-primary{background:var(--y); border-color:var(--y); color:#111; font-weight:700;}
   button.btn-ghost{background:transparent; border-color:transparent; color:var(--text-muted); padding:6px 8px;}
   .note{font-size:11.5px; color:var(--text-muted); line-height:1.5;}
+  .tag{font-size:11px; border:1px solid var(--line); border-radius:6px; padding:1px 6px;}
   .card{background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:16px; margin:0 14px 14px;}
   .card h3{font-size:14px; color:var(--text); font-family:'Work Sans'; font-weight:700; margin-bottom:10px;}
   .card.meal{border-left:5px solid var(--y);}
@@ -110,22 +112,23 @@
   .gateBox input{text-align:center; letter-spacing:2px; font-size:16px;}
   .gateBox .btn-primary{width:100%; margin-top:10px;}
   .gateErr{color:var(--warn); font-size:12.5px; margin-top:8px; display:none;}
+  .gateLogo{display:flex; justify-content:center; margin-bottom:10px;}
 
   /* ---- top gauges ---- */
   #topBar{position:sticky; top:0; z-index:5; background:var(--bg); border-bottom:3px solid var(--y);
     padding-top:calc(10px + env(safe-area-inset-top,0px)); padding-bottom:6px;}
   .topBarHead{display:flex; align-items:flex-start; justify-content:space-between; padding:0 14px 6px;}
+  .titleRow{display:flex; align-items:center; gap:8px;}
   .topBarHead h1{font-size:19px; font-weight:800;}
+  .logoImg{width:34px; height:34px; border-radius:50%; object-fit:cover; display:block;}
   .topBarHead .sub{font-size:11px; color:var(--text-muted);}
   .who{font-size:13px; font-weight:700; margin-top:2px;}
-  .payBox{display:inline-block; margin-top:3px; font-size:10.5px; padding:2px 8px; border-radius:6px; background:var(--panel-2); border:1px solid var(--line); color:var(--text-muted);}
-  .payBox.due{background:var(--carb-soft); border-color:var(--y); color:var(--text);}
   .gearBtn{background:none; border:none; color:var(--text-muted); font-size:16px; padding:4px;}
-  .gaugeRow{display:flex; justify-content:space-around; gap:4px; padding:0 8px;}
+  .gaugeRow{display:flex; justify-content:space-around; gap:2px; padding:0 4px;}
   .gaugeItem{flex:1; max-width:120px; text-align:center;}
   .gaugeSvg{width:100%; height:auto; display:block;}
   .gaugeLabel{font-size:10.5px; color:var(--text); margin-top:-6px; font-weight:700;}
-  .gaugeSub{font-size:9.5px; color:var(--text-muted); margin-top:-2px;}
+  .gaugeSub{font-size:9px; color:var(--text-muted); margin-top:-2px; white-space:nowrap;}
 
   /* ---- log ---- */
   .foodRow{display:flex; align-items:center; gap:8px; padding:8px 0; border-bottom:1px solid var(--line); font-size:13px;}
@@ -146,6 +149,18 @@
   .proteinTip.short{background:var(--carb-soft); border:1px solid var(--y); color:var(--text);}
   .proteinTip.ok{background:#111; border:1px solid #111; color:var(--y);}
 
+  /* ---- panel entrenador: reporte ---- */
+  .repGrid{display:grid; grid-template-columns:repeat(5,1fr); gap:6px; margin-bottom:12px;}
+  .repTile{background:var(--panel-2); border:1px solid var(--line); border-radius:8px; padding:6px 2px; text-align:center; cursor:pointer;}
+  .repTile.on{border-color:#111; background:var(--carb-soft);}
+  .repTile .n{font-family:'Big Shoulders Display'; font-weight:700; font-size:21px; line-height:1.1;}
+  .repTile .l{font-size:9.5px; color:var(--text-muted); line-height:1.15;}
+  .memberBlock{border-bottom:1px solid var(--line); padding:6px 0;}
+  .statTable{width:100%; border-collapse:collapse; font-size:12.5px;}
+  .statTable th{font-size:10.5px; color:var(--text-muted); font-weight:500; text-align:center; padding:2px 4px;}
+  .statTable th:first-child, .statTable td:first-child{text-align:left;}
+  .statTable td{text-align:center; padding:5px 4px; border-top:1px solid var(--line);}
+
   .hidden{display:none !important;}
 </style>
 </head>
@@ -161,10 +176,12 @@
   <div id="topBar">
     <div class="topBarHead">
       <div>
-        <h1>RETO TITANES</h1>
+        <div class="titleRow">
+          <h1>RETO TITANES</h1>
+          <img src="logo.png" alt="Titanes" class="logoImg" onerror="this.style.display='none'">
+        </div>
         <div class="sub" id="dateLabel"></div>
         <div class="who" id="whoName"></div>
-        <div id="payBox"></div>
       </div>
       <button class="gearBtn" id="ownerGear" title="Configuración" style="display:none;">⚙️</button>
     </div>
@@ -238,6 +255,8 @@
     {k:'cena', l:'CENA'}
   ];
 
+  var GATE_LOGO = '<div class="gateLogo"><img src="logo.png" alt="Titanes" class="logoImg" style="width:64px; height:64px;" onerror="this.style.display=\'none\'"></div>';
+
   var state = {
     db:null, user:null, sample:null,
     isOwner:false,
@@ -246,13 +265,40 @@
     myMember:null,
     perfil:null,
     log:{},
-    cache:{}
+    cache:{},
+    panelSig:null
   };
 
-  function todayKey(){
-    var d=new Date();
+  // ---------- fechas ----------
+  function keyOf(d){
     return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
   }
+  function todayKey(){ return keyOf(new Date()); }
+  function parseKey(s){
+    var p = String(s).split('-');
+    return new Date(parseInt(p[0],10), parseInt(p[1],10)-1, parseInt(p[2],10));
+  }
+  // mismo día del mes siguiente (si el mes siguiente no tiene ese día, usa el último)
+  function addMonthKey(s){
+    var p = String(s).split('-');
+    var y = parseInt(p[0],10), mo = parseInt(p[1],10), d = parseInt(p[2],10);
+    var last = new Date(y, mo+1, 0).getDate();
+    return keyOf(new Date(y, mo, Math.min(d, last)));
+  }
+  function fmtDay(s){ return parseKey(s).toLocaleDateString('es-MX', {day:'numeric', month:'short'}); }
+  function fmtDayY(s){ return parseKey(s).toLocaleDateString('es-MX', {day:'numeric', month:'short', year:'numeric'}); }
+  function fmtDow(s){ return parseKey(s).toLocaleDateString('es-MX', {weekday:'short', day:'numeric', month:'short'}); }
+  function daysUntil(s){
+    var t = new Date(); t.setHours(0,0,0,0);
+    return Math.round((parseKey(s) - t) / 86400000);
+  }
+  function phoneDigits(t){
+    var d = String(t||'').replace(/[^0-9]/g,'');
+    if(d.length === 10) d = '52' + d;
+    return d;
+  }
+  function pct(a, b){ return b ? (a/b*100) : 0; }
+
   function escapeHtml(str){
     return String(str).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; });
   }
@@ -284,7 +330,7 @@
     overlay.id = 'copyBoxOverlay';
     overlay.style.cssText = 'position:fixed; inset:0; background:rgba(0,0,0,.55); z-index:9998; display:flex; align-items:center; justify-content:center; padding:20px;';
     overlay.innerHTML = '<div style="background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:16px; max-width:420px; width:100%;">' +
-      '<p style="margin:0 0 8px; font-size:13px; color:var(--text-muted);">No se pudo compartir automáticamente. Selecciona el texto y cópialo manualmente:</p>' +
+      '<p style="margin:0 0 8px; font-size:13px; color:var(--text-muted);">No se pudo copiar automáticamente. Selecciona el texto y cópialo manualmente:</p>' +
       '<textarea id="copyBoxText" readonly style="width:100%; height:160px; border-radius:8px; padding:8px; font-size:12.5px;"></textarea>' +
       '<button id="copyBoxClose" class="btn btn-primary" style="width:100%; margin-top:10px;">Cerrar</button>' +
     '</div>';
@@ -311,7 +357,7 @@
     '</div>';
     document.body.appendChild(overlay);
     var field = document.getElementById('inputBoxField');
-    field.focus(); field.select();
+    field.focus(); if(field.select && (opts.type||'text') !== 'date') field.select();
     function close(){ overlay.remove(); }
     document.getElementById('inputBoxCancel').addEventListener('click', close);
     document.getElementById('inputBoxOk').addEventListener('click', function(){
@@ -322,6 +368,41 @@
     field.addEventListener('keydown', function(e){
       if(e.key === 'Enter'){ document.getElementById('inputBoxOk').click(); }
     });
+  }
+
+  // ventana genérica con scroll (fichas y estadísticas)
+  function openModal(html){
+    var old = document.getElementById('modalOverlay');
+    if(old) old.remove();
+    var ov = document.createElement('div');
+    ov.id = 'modalOverlay';
+    ov.style.cssText = 'position:fixed; inset:0; background:rgba(0,0,0,.55); z-index:9997; display:flex; align-items:flex-start; justify-content:center; padding:16px; overflow:auto;';
+    ov.innerHTML = '<div style="background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:16px; max-width:460px; width:100%; margin:auto 0;">' +
+      html +
+      '<button class="btn btn-primary" id="modalCloseBtn" style="width:100%; margin-top:14px;">Cerrar</button>' +
+    '</div>';
+    document.body.appendChild(ov);
+    document.getElementById('modalCloseBtn').addEventListener('click', function(){ ov.remove(); });
+    return ov;
+  }
+
+  // pregunta con dos botones
+  function showChoice(title, yesLabel, noLabel, onYes, onNo){
+    var old = document.getElementById('choiceOverlay');
+    if(old) old.remove();
+    var overlay = document.createElement('div');
+    overlay.id = 'choiceOverlay';
+    overlay.style.cssText = 'position:fixed; inset:0; background:rgba(0,0,0,.55); z-index:9998; display:flex; align-items:center; justify-content:center; padding:20px;';
+    overlay.innerHTML = '<div style="background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:16px; max-width:360px; width:100%;">' +
+      '<p style="margin:0 0 14px; font-size:15px; font-weight:600; color:var(--text);">'+escapeHtml(title)+'</p>' +
+      '<div style="display:flex; gap:8px;">' +
+        '<button id="choiceNo" class="btn" style="flex:1;">'+escapeHtml(noLabel)+'</button>' +
+        '<button id="choiceYes" class="btn btn-primary" style="flex:1;">'+escapeHtml(yesLabel)+'</button>' +
+      '</div>' +
+    '</div>';
+    document.body.appendChild(overlay);
+    document.getElementById('choiceYes').addEventListener('click', function(){ overlay.remove(); if(onYes) onYes(); });
+    document.getElementById('choiceNo').addEventListener('click', function(){ overlay.remove(); if(onNo) onNo(); });
   }
 
   // botón de dos toques
@@ -362,6 +443,15 @@
     }catch(e){ return null; }
   }
 
+  // firma del panel: ignora los datos que cambian seguido (dias / perfil) para no borrar lo que el entrenador está escribiendo
+  function panelSignature(map){
+    var ids = Object.keys(map).sort();
+    return JSON.stringify(ids.map(function(id){
+      var m = map[id];
+      return [id, m.nombre, m.codigo, m.telefono, m.activo, m.inicioPago, m.diaPago, m.ultimoPago, m.promesa, (m.dispositivos||[]).length];
+    })) + '|' + todayKey();
+  }
+
   async function initGate(){
     state.db = initFirebaseDb();
 
@@ -382,7 +472,13 @@
           var map = {};
           snap.docs.forEach(function(d){ map[d.id] = d.data(); });
           state.miembros = map;
-          if(state.isOwner){ if(!appHidden()) renderOwnerPanelIfVisible(); }
+          if(state.isOwner){
+            var sig = panelSignature(map);
+            if(sig !== state.panelSig){
+              state.panelSig = sig;
+              if(!appHidden()) renderOwnerPanelIfVisible();
+            }
+          }
           else { checkAccess(); }
         }, function(){ if(!state.isOwner) renderGate('signin'); });
       }catch(e){ if(!state.isOwner) renderGate('signin'); }
@@ -445,6 +541,7 @@
     var box = document.getElementById('gateBox');
     if(kind === 'signin'){
       box.innerHTML =
+        GATE_LOGO +
         '<h1>RETO TITANES</h1>' +
         '<p>No se pudo conectar con la base de datos. Revisa tu conexión a internet e intenta de nuevo.</p>' +
         '<button class="btn btn-primary" onclick="location.reload()">Reintentar</button>';
@@ -452,6 +549,7 @@
     }
     if(kind === 'revoked'){
       box.innerHTML =
+        GATE_LOGO +
         '<h1>RETO TITANES</h1>' +
         '<p>Tu acceso ya no está activo. Si crees que es un error, contacta a tu entrenador.</p>' +
         '<input id="codeInput" type="text" placeholder="Código" autocomplete="off">' +
@@ -464,6 +562,7 @@
       return;
     }
     box.innerHTML =
+      GATE_LOGO +
       '<h1>RETO TITANES</h1>' +
       '<p>Ingresa el código de acceso personal que te dio tu entrenador.</p>' +
       '<input id="codeInput" type="text" placeholder="Código" autocomplete="off">' +
@@ -546,6 +645,46 @@
     });
   }
 
+  // ---------- pagos: vencimiento = mismo día del mes siguiente ----------
+  function memberDue(m){
+    if(m.inicioPago) return addMonthKey(m.inicioPago);
+    if(m.diaPago){
+      // clientes dados de alta con el sistema anterior (día de pago + último pago)
+      var base = new Date(m.ultimoPago || m.creadoEn || Date.now());
+      var y = base.getFullYear(), mo = base.getMonth()+1;
+      var last = new Date(y, mo+1, 0).getDate();
+      return keyOf(new Date(y, mo, Math.min(m.diaPago, last)));
+    }
+    return null;
+  }
+
+  // k: sinfecha | vencido | promesa | porvencer | corriente
+  function memberStatus(m){
+    var due = memberDue(m);
+    if(!due) return {k:'sinfecha', due:null, days:null};
+    var d = daysUntil(due);
+    if(d < 0){
+      if(m.promesa && m.promesa >= todayKey()) return {k:'promesa', due:due, days:d};
+      return {k:'vencido', due:due, days:d};
+    }
+    if(d <= 3) return {k:'porvencer', due:due, days:d};
+    return {k:'corriente', due:due, days:d};
+  }
+
+  function paymentBadgeHtml(m){
+    var st = memberStatus(m);
+    if(st.k === 'sinfecha') return '<span class="note">sin fecha de pago</span>';
+    if(st.k === 'promesa') return '<span class="tag" style="color:#2563eb; border-color:#2563eb;">🤝 Promesa de pago: '+fmtDay(m.promesa)+'</span> <span class="note">venció '+fmtDay(st.due)+'</span>';
+    if(st.k === 'vencido'){
+      var n = Math.abs(st.days);
+      return '<span class="tag" style="color:var(--warn); border-color:var(--warn);">Vencido hace '+n+' día'+(n===1?'':'s')+' ⚠️</span> <span class="note">venció '+fmtDay(st.due)+'</span>';
+    }
+    if(st.k === 'porvencer'){
+      return '<span class="tag" style="color:var(--fat); border-color:var(--fat);">'+(st.days===0 ? 'Vence hoy' : 'Vence en '+st.days+' día'+(st.days===1?'':'s'))+' 🔔</span> <span class="note">'+fmtDay(st.due)+'</span>';
+    }
+    return '<span class="note">Vence el '+fmtDay(st.due)+' (en '+st.days+' días)</span>';
+  }
+
   // ---------- owner: panel de miembros ----------
   function randomCode(){
     var letras = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
@@ -555,6 +694,34 @@
   }
 
   var ownerSearchQuery = '';
+  var ownerFilter = 'todos';
+
+  function reportCounts(){
+    var c = {activos:0, corriente:0, porvencer:0, promesa:0, vencido:0, sinfecha:0};
+    Object.keys(state.miembros||{}).forEach(function(id){
+      var m = state.miembros[id];
+      if(m.activo) c.activos++;
+      c[memberStatus(m).k]++;
+    });
+    return c;
+  }
+
+  function renderReportTiles(){
+    var c = reportCounts();
+    var tiles = [
+      {f:'activos', n:c.activos, l:'Clientes activos'},
+      {f:'corriente', n:c.corriente, l:'Al corriente'},
+      {f:'porvencer', n:c.porvencer, l:'Por vencer (≤3 d)'},
+      {f:'promesa', n:c.promesa, l:'Promesa de pago'},
+      {f:'vencido', n:c.vencido, l:'Vencidos'}
+    ];
+    var html = '<div class="repGrid">' + tiles.map(function(t){
+      return '<div class="repTile'+(ownerFilter===t.f?' on':'')+'" data-f="'+t.f+'"><div class="n">'+t.n+'</div><div class="l">'+t.l+'</div></div>';
+    }).join('') + '</div>';
+    if(c.sinfecha) html += '<p class="note" style="margin:-6px 0 10px;">'+c.sinfecha+' cliente'+(c.sinfecha===1?'':'s')+' sin fecha de pago. Toca un recuadro para ver solo esa lista; tócalo otra vez para ver todos.</p>';
+    else html += '<p class="note" style="margin:-6px 0 10px;">Toca un recuadro para ver solo esa lista; tócalo otra vez para ver todos.</p>';
+    return html;
+  }
 
   function buildMemberRowsHtml(ids){
     return ids.map(function(id){
@@ -563,25 +730,29 @@
       var devTag = devCount > 1
         ? '<span class="tag" style="color:var(--fat); border-color:var(--fat); margin-left:6px;">'+devCount+' dispositivos ⚠️</span>'
         : (devCount === 1 ? '<span class="note" style="margin-left:6px;">1 dispositivo</span>' : '');
-      return '<div class="foodRow" style="flex-wrap:wrap;">' +
-        '<span class="memberInfo"><b>'+escapeHtml(m.nombre||'(sin nombre)')+'</b><br><span class="note">código: <b style="color:var(--text); letter-spacing:1px;">'+escapeHtml(m.codigo||'')+'</b></span>'+devTag+'</span>' +
-        '<button class="btn btn-ghost memberToggle" data-id="'+id+'" style="'+(m.activo?'color:#1E8E3E;':'color:var(--warn);')+'">'+(m.activo?'Activa ✓':'Bloqueada ✕')+'</button>' +
-        '<button class="btn btn-ghost memberRegen" data-id="'+id+'" title="Generar código nuevo">🔄</button>' +
-        '<button class="btn btn-ghost memberShare" data-id="'+id+'" title="Compartir link + código de acceso">📲</button>' +
-        '<button class="btn btn-ghost memberDelete" data-id="'+id+'" title="Eliminar cliente" style="color:var(--warn);">🗑️</button>' +
-      '</div>' +
-      '<details class="moreData" style="margin:0 0 10px;">' +
-        '<summary>ℹ️ Ver información de contacto</summary>' +
-        '<p class="note" style="margin:8px 0 0;">Teléfono: '+(m.telefono ? escapeHtml(m.telefono) : 'no registrado')+'</p>' +
-      '</details>' +
-      '<div class="checkRow">' +
-        '<span>'+paymentBadgeHtml(m)+'</span>' +
-        '<span>' +
-          '<button class="btn btn-ghost memberPagoDia" data-id="'+id+'" title="Definir/editar día de pago" style="padding:4px 6px;">🗓️</button>' +
-          '<button class="btn btn-primary memberPagoOk" data-id="'+id+'" style="padding:6px 10px; margin-left:4px;">✅ Marcar pago</button>' +
-        '</span>' +
+      var tel = m.telefono
+        ? '📞 <a href="tel:'+escapeHtml(m.telefono)+'">'+escapeHtml(m.telefono)+'</a> · <a href="https://wa.me/'+phoneDigits(m.telefono)+'" target="_blank" rel="noopener">WhatsApp</a>'
+        : '📞 sin teléfono';
+      return '<div class="memberBlock">' +
+        '<div class="foodRow" style="flex-wrap:wrap; border-bottom:none; padding-bottom:2px;">' +
+          '<span class="memberInfo memberOpen" data-id="'+id+'" style="cursor:pointer;"><b>'+escapeHtml(m.nombre||'(sin nombre)')+'</b> <span class="note">›</span><br><span class="note">código: <b style="color:var(--text); letter-spacing:1px;">'+escapeHtml(m.codigo||'')+'</b></span>'+devTag+'</span>' +
+          '<button class="btn btn-ghost memberToggle" data-id="'+id+'" style="'+(m.activo?'color:#1E8E3E;':'color:var(--warn);')+'">'+(m.activo?'Activa ✓':'Bloqueada ✕')+'</button>' +
+          '<button class="btn btn-ghost memberStats" data-id="'+id+'" title="Ver estadísticas">📊</button>' +
+          '<button class="btn btn-ghost memberShare" data-id="'+id+'" title="Compartir link + código de acceso">📲</button>' +
+          '<button class="btn btn-ghost memberRegen" data-id="'+id+'" title="Generar código nuevo">🔄</button>' +
+          '<button class="btn btn-ghost memberDelete" data-id="'+id+'" title="Eliminar cliente" style="color:var(--warn);">🗑️</button>' +
+        '</div>' +
+        '<div class="note" style="margin:0 0 4px;">'+tel+'</div>' +
+        '<div class="checkRow" style="border-bottom:none; padding:6px 0 2px;">' +
+          '<span>'+paymentBadgeHtml(m)+'</span>' +
+          '<span style="white-space:nowrap;">' +
+            '<button class="btn btn-ghost memberPagoDia" data-id="'+id+'" title="Fecha de inicio de pago" style="padding:4px 6px;">🗓️</button>' +
+            '<button class="btn btn-ghost memberPromesa" data-id="'+id+'" title="Promesa de pago" style="padding:4px 6px;">🤝</button>' +
+            '<button class="btn btn-primary memberPagoOk" data-id="'+id+'" style="padding:6px 10px; margin-left:4px;">✅ Marcar pago</button>' +
+          '</span>' +
+        '</div>' +
       '</div>';
-    }).join('') || '<p class="note">'+(ownerSearchQuery ? 'Sin resultados para "'+escapeHtml(ownerSearchQuery)+'".' : 'Aún no das de alta a nadie.')+'</p>';
+    }).join('') || '<p class="note">'+(ownerSearchQuery || ownerFilter!=='todos' ? 'Sin resultados con ese filtro o búsqueda.' : 'Aún no das de alta a nadie.')+'</p>';
   }
 
   function sortedMemberIds(){
@@ -592,11 +763,18 @@
 
   function filteredMemberIds(){
     var ids = sortedMemberIds();
+    if(ownerFilter !== 'todos'){
+      ids = ids.filter(function(id){
+        var m = state.miembros[id];
+        if(ownerFilter === 'activos') return !!m.activo;
+        return memberStatus(m).k === ownerFilter;
+      });
+    }
     var q = ownerSearchQuery.trim().toLowerCase();
     if(!q) return ids;
     return ids.filter(function(id){
       var m = state.miembros[id];
-      return (m.nombre||'').toLowerCase().indexOf(q) !== -1 || (m.codigo||'').toLowerCase().indexOf(q) !== -1;
+      return (m.nombre||'').toLowerCase().indexOf(q) !== -1 || (m.codigo||'').toLowerCase().indexOf(q) !== -1 || String(m.telefono||'').indexOf(q) !== -1;
     });
   }
 
@@ -604,19 +782,24 @@
     var rows = buildMemberRowsHtml(filteredMemberIds());
 
     return '<div class="card" id="ownerPanelCard">' +
-      '<h3>👥 Panel del entrenador — accesos</h3>' +
-      '<div class="field" style="margin-bottom:10px;"><input id="ownerSearchInput" type="search" placeholder="Buscar por nombre o código…" value="'+escapeHtml(ownerSearchQuery)+'"></div>' +
+      '<h3>👥 Panel del entrenador</h3>' +
+      renderReportTiles() +
+      '<div class="row2" style="grid-template-columns:1fr auto; align-items:start; margin-bottom:10px;">' +
+        '<div class="field" style="margin-bottom:0;"><input id="ownerSearchInput" type="search" placeholder="Buscar por nombre, código o teléfono…" value="'+escapeHtml(ownerSearchQuery)+'"></div>' +
+        '<button class="btn" id="copyPhonesBtn" title="Copiar todos los teléfonos">📞 Copiar</button>' +
+      '</div>' +
       '<div id="memberRows">'+rows+'</div>' +
-      '<div class="row2" style="margin-top:10px;">' +
+      '<h3 style="margin-top:14px;">Dar de alta a un cliente</h3>' +
+      '<div class="row2" style="margin-top:6px;">' +
         '<div class="field"><label>Nombre</label><input id="newMemberName" type="text"></div>' +
         '<div class="field"><label>Código</label><input id="newMemberCode" type="text" value="'+randomCode()+'"></div>' +
       '</div>' +
       '<div class="row2">' +
         '<div class="field"><label>Teléfono</label><input id="newMemberPhone" type="tel" placeholder="10 dígitos"></div>' +
-        '<div class="field"><label>Día de pago (1-31)</label><input id="newMemberDiaPago" type="number" min="1" max="31" placeholder="Ej. 2"></div>' +
+        '<div class="field"><label>Fecha de inicio de pago</label><input id="newMemberInicio" type="date" value="'+todayKey()+'"></div>' +
       '</div>' +
       '<button class="btn btn-primary" id="addMemberBtn" style="width:100%;">+ Agregar / dar de alta</button>' +
-      '<p class="note" style="margin-top:8px;">Toca el estado de cualquier persona para activarla o bloquearla. Si ves "2+ dispositivos", probablemente compartió su código — toca 🔄 para darle uno nuevo sin afectar a las demás. 📲 le manda por WhatsApp (o copia) el link y su código. 🗑️ la elimina (pide confirmación). "✅ Marcar pago" reinicia el conteo a un mes desde hoy.</p>' +
+      '<p class="note" style="margin-top:8px;">Toca el nombre de un cliente para ver todos sus datos, o 📊 para ver sus estadísticas. El pago vence el mismo día del mes siguiente a la fecha de inicio. "✅ Marcar pago" renueva un mes (si paga a tiempo suma desde su vencimiento; si ya venció, desde hoy). 🗓️ cambia la fecha de inicio y 🤝 registra una promesa de pago. Toca el estado para activar o bloquear; si ves "2+ dispositivos", probablemente compartió su código — toca 🔄 para darle uno nuevo. 📲 le manda por WhatsApp (o copia) el link y su código. 🗑️ elimina al cliente (pide confirmación).</p>' +
     '</div>';
   }
 
@@ -651,14 +834,38 @@
       var nombre = document.getElementById('newMemberName').value.trim();
       var codigo = document.getElementById('newMemberCode').value.trim();
       var telefono = document.getElementById('newMemberPhone').value.trim();
-      var diaPago = parseInt(document.getElementById('newMemberDiaPago').value, 10) || null;
+      var inicio = document.getElementById('newMemberInicio').value || null;
       if(!nombre || !codigo){ showToast('Pon nombre y código.', true); return; }
       if(!state.db){ showToast('No hay conexión a la base de datos.', true); return; }
       try{
-        await state.db.collection('miembros').add({nombre:nombre, codigo:codigo, telefono:telefono, diaPago:diaPago, ultimoPago:diaPago?Date.now():null, activo:true, dispositivos:[], creadoEn:Date.now()});
+        await state.db.collection('miembros').add({nombre:nombre, codigo:codigo, telefono:telefono, inicioPago:inicio, ultimoPago:inicio?Date.now():null, promesa:null, activo:true, dispositivos:[], creadoEn:Date.now()});
+        document.getElementById('newMemberName').value = '';
+        document.getElementById('newMemberPhone').value = '';
       }catch(e){ showToast('No se pudo agregar.', true); }
     });
     wireMemberRowButtons();
+
+    Array.prototype.forEach.call(document.querySelectorAll('.repTile'), function(t){
+      t.addEventListener('click', function(){
+        var f = t.getAttribute('data-f');
+        ownerFilter = (ownerFilter === f) ? 'todos' : f;
+        renderOwnerPanelIfVisible();
+      });
+    });
+
+    var copyBtn = document.getElementById('copyPhonesBtn');
+    if(copyBtn){
+      copyBtn.addEventListener('click', async function(){
+        var txt = sortedMemberIds().map(function(id){
+          var m = state.miembros[id];
+          return (m.nombre||'(sin nombre)') + ': ' + (m.telefono || 'sin teléfono');
+        }).join('\n');
+        if(!txt){ showToast('No hay clientes todavía.', true); return; }
+        try{ await navigator.clipboard.writeText(txt); showToast('Teléfonos copiados.', false); }
+        catch(e){ showCopyBox(txt); }
+      });
+    }
+
     var searchInput = document.getElementById('ownerSearchInput');
     if(searchInput){
       searchInput.addEventListener('input', function(){
@@ -673,13 +880,24 @@
   }
 
   function wireMemberRowButtons(){
+    Array.prototype.forEach.call(document.querySelectorAll('.memberOpen'), function(el){
+      el.addEventListener('click', function(){ openFicha(el.getAttribute('data-id')); });
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('.memberStats'), function(btn){
+      btn.addEventListener('click', function(){ openStats(btn.getAttribute('data-id'), 30); });
+    });
     Array.prototype.forEach.call(document.querySelectorAll('.memberPagoOk'), function(btn){
       btn.addEventListener('click', async function(){
         var id = btn.getAttribute('data-id');
         var m = state.miembros[id];
-        if(!state.db) return;
-        if(!m.diaPago){ showToast('Primero define el día de pago con 🗓️.', true); return; }
-        try{ await state.db.doc('miembros/'+id).update({ultimoPago: Date.now()}); }
+        if(!state.db || !m) return;
+        var hoy = todayKey();
+        var due = memberDue(m);
+        var inicio = (due && due >= hoy) ? due : hoy;
+        try{
+          await state.db.doc('miembros/'+id).update({inicioPago: inicio, ultimoPago: Date.now(), promesa: null});
+          showToast('Pago registrado. Próximo vencimiento: ' + fmtDayY(addMonthKey(inicio)), false);
+        }
         catch(e){ showToast('No se pudo actualizar.', true); }
       });
     });
@@ -687,16 +905,36 @@
       btn.addEventListener('click', function(){
         var id = btn.getAttribute('data-id');
         var m = state.miembros[id];
-        if(!state.db) return;
+        if(!state.db || !m) return;
         showInlinePrompt({
-          title: 'Día de pago mensual para ' + (m.nombre||'') + ' (1-31)',
-          value: m.diaPago || '',
-          type: 'number',
-          placeholder: 'Ej. 2',
+          title: 'Fecha de inicio de pago de ' + (m.nombre||'') + ' (vence el mismo día del mes siguiente)',
+          value: m.inicioPago || todayKey(),
+          type: 'date',
           onSubmit: async function(val){
-            var dia = parseInt(val, 10);
-            if(!dia || dia<1 || dia>31){ showToast('Escribe un número entre 1 y 31.', true); return; }
-            try{ await state.db.doc('miembros/'+id).update({diaPago: dia, ultimoPago: m.ultimoPago || Date.now()}); }
+            if(!val){ showToast('Elige una fecha.', true); return; }
+            try{
+              await state.db.doc('miembros/'+id).update({inicioPago: val, ultimoPago: Date.now()});
+              showToast('Vence el ' + fmtDayY(addMonthKey(val)), false);
+            }
+            catch(e){ showToast('No se pudo actualizar.', true); }
+          }
+        });
+      });
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('.memberPromesa'), function(btn){
+      btn.addEventListener('click', function(){
+        var id = btn.getAttribute('data-id');
+        var m = state.miembros[id];
+        if(!state.db || !m) return;
+        showInlinePrompt({
+          title: 'Fecha en que ' + (m.nombre||'') + ' prometió pagar (déjalo vacío para quitar la promesa)',
+          value: m.promesa || '',
+          type: 'date',
+          onSubmit: async function(val){
+            try{
+              await state.db.doc('miembros/'+id).update({promesa: val || null});
+              showToast(val ? 'Promesa guardada: ' + fmtDayY(val) : 'Promesa quitada.', false);
+            }
             catch(e){ showToast('No se pudo actualizar.', true); }
           }
         });
@@ -733,7 +971,7 @@
         var texto = '💪 RETO TITANES — tu acceso\n\n' +
           'Hola ' + (m.nombre || '') + ', aquí está tu acceso a la app de macros:\n' + link + '\n\n' +
           'Tu código: ' + (m.codigo || '');
-        var waUrl = m.telefono ? ('https://wa.me/' + m.telefono.replace(/[^0-9]/g,'') + '?text=' + encodeURIComponent(texto)) : null;
+        var waUrl = m.telefono ? ('https://wa.me/' + phoneDigits(m.telefono) + '?text=' + encodeURIComponent(texto)) : null;
         showShareBox(m, texto, waUrl);
       });
     });
@@ -754,30 +992,255 @@
 
   function renderOwnerPanelIfVisible(){
     var el = document.getElementById('ownerPanelCard');
-    if(el){ el.outerHTML = renderOwnerPanel(); wireOwnerPanel(); }
+    if(!el) return;
+    var keep = {};
+    ['newMemberName','newMemberCode','newMemberPhone','newMemberInicio'].forEach(function(fid){
+      var f = document.getElementById(fid);
+      if(f) keep[fid] = f.value;
+    });
+    el.outerHTML = renderOwnerPanel();
+    Object.keys(keep).forEach(function(fid){
+      var f = document.getElementById(fid);
+      if(f) f.value = keep[fid];
+    });
+    wireOwnerPanel();
   }
 
-  // ---------- encabezado: nombre + cajita de mensualidad ----------
+  // ---------- owner: ficha del cliente ----------
+  function sexoLabel(s){ return s==='hombre' ? 'Hombre' : (s==='mujer' ? 'Mujer' : null); }
+
+  function openFicha(id){
+    var m = state.miembros[id];
+    if(!m) return;
+    var p = m.perfil || null;
+    var due = memberDue(m);
+    function tr(l, v){
+      return '<tr><td class="note" style="padding:3px 10px 3px 0; white-space:nowrap; vertical-align:top;">'+l+'</td><td style="font-size:13px;">'+((v==null||v==='')?'—':v)+'</td></tr>';
+    }
+    var datosCliente;
+    if(p){
+      var base = computeTargets(p, 0);
+      datosCliente = '<table>' +
+        tr('Nombre', escapeHtml(p.nombre||'')) +
+        tr('Peso', p.peso!=null ? fmt(p.peso,1)+' kg' : null) +
+        tr('Estatura', p.estatura!=null ? p.estatura+' cm' : null) +
+        tr('Edad', p.edad!=null ? p.edad+' años' : null) +
+        tr('Sexo (para el cálculo)', sexoLabel(p.sexo)) +
+        tr('Objetivo', objetivoLabel(p.objetivo)) +
+        tr('Peso meta', p.pesoMeta ? fmt(p.pesoMeta,1)+' kg' : null) +
+        tr('Gramos por scoop', p.scoopG ? p.scoopG+' g' : null) +
+        tr('Metabolismo basal (báscula)', p.bmrManual ? fmt(p.bmrManual)+' kcal' : 'no capturado (usa fórmula)') +
+        tr('Última cita de medidas', p.ultimaPesada ? fmtDayY(p.ultimaPesada) : null) +
+        tr('Creatina diaria', p.peso ? fmt(p.peso*0.07,1)+' g' : null) +
+        tr('Meta base diaria', fmt(base.kcal)+' kcal · P '+fmt(base.proteina)+' g · C '+fmt(base.carbos)+' g · G '+fmt(base.grasa)+' g') +
+        tr('Datos actualizados', m.perfilActualizado ? new Date(m.perfilActualizado).toLocaleDateString('es-MX',{day:'numeric',month:'short',year:'numeric'}) : null) +
+      '</table>';
+    } else {
+      datosCliente = '<p class="note">Aún no ha capturado sus datos en la app (o todavía no abre la versión nueva).</p>';
+    }
+    var devs = (m.dispositivos||[]).length;
+    var html =
+      '<h3 style="font-size:22px; margin-bottom:6px;">'+escapeHtml(m.nombre||'(sin nombre)')+'</h3>' +
+      '<div style="margin-bottom:12px;">'+paymentBadgeHtml(m)+'</div>' +
+      '<div class="field"><label>Nombre</label><input id="fk_nombre" type="text" value="'+escapeHtml(m.nombre||'')+'"></div>' +
+      '<div class="field"><label>Teléfono</label><input id="fk_tel" type="tel" value="'+escapeHtml(m.telefono||'')+'"></div>' +
+      '<div class="row2">' +
+        '<div class="field"><label>Inicio de pago</label><input id="fk_inicio" type="date" value="'+escapeHtml(m.inicioPago||'')+'"></div>' +
+        '<div class="field"><label>Promesa de pago</label><input id="fk_prom" type="date" value="'+escapeHtml(m.promesa||'')+'"></div>' +
+      '</div>' +
+      '<p class="note" style="margin:-4px 0 10px;">Vencimiento: <b style="color:var(--text);">'+(due ? fmtDayY(due) : 'sin fecha')+'</b> (mismo día del mes siguiente al inicio).</p>' +
+      '<button class="btn btn-primary" id="fkSave" style="width:100%;">Guardar cambios</button>' +
+      '<button class="btn" id="fkStats" style="width:100%; margin-top:8px;">📊 Ver estadísticas</button>' +
+      '<h3 style="margin-top:16px;">Acceso</h3>' +
+      '<table>' +
+        tr('Código', escapeHtml(m.codigo||'')) +
+        tr('Estado', m.activo ? 'Activa ✓' : 'Bloqueada ✕') +
+        tr('Dispositivos', devs ? String(devs) : '0') +
+        tr('Alta', m.creadoEn ? new Date(m.creadoEn).toLocaleDateString('es-MX',{day:'numeric',month:'short',year:'numeric'}) : null) +
+        tr('Último pago registrado', m.ultimoPago ? new Date(m.ultimoPago).toLocaleDateString('es-MX',{day:'numeric',month:'short',year:'numeric'}) : null) +
+      '</table>' +
+      '<h3 style="margin-top:16px;">Datos que capturó el cliente</h3>' +
+      datosCliente;
+    var ov = openModal(html);
+    document.getElementById('fkSave').addEventListener('click', function(){
+      if(!state.db){ showToast('No hay conexión a la base de datos.', true); return; }
+      var upd = {
+        nombre: document.getElementById('fk_nombre').value.trim(),
+        telefono: document.getElementById('fk_tel').value.trim(),
+        inicioPago: document.getElementById('fk_inicio').value || null,
+        promesa: document.getElementById('fk_prom').value || null
+      };
+      if(!upd.nombre){ showToast('Pon el nombre.', true); return; }
+      if(upd.inicioPago && upd.inicioPago !== m.inicioPago) upd.ultimoPago = Date.now();
+      state.db.doc('miembros/'+id).update(upd).then(function(){
+        ov.remove();
+        showToast('Guardado.', false);
+      }).catch(function(){ showToast('No se pudo guardar.', true); });
+    });
+    document.getElementById('fkStats').addEventListener('click', function(){ openStats(id, 30); });
+  }
+
+  // ---------- owner: estadísticas del cliente ----------
+  function openStats(id, range){
+    var m = state.miembros[id];
+    if(!m) return;
+    if(range == null) range = 30;
+    var dias = m.dias || {};
+    var hoy = todayKey();
+    var allKeys = Object.keys(dias).sort();
+    var startKey, N;
+    if(range > 0){
+      var sd = new Date(); sd.setDate(sd.getDate() - (range-1));
+      startKey = keyOf(sd); N = range;
+    } else {
+      startKey = allKeys.length ? allKeys[0] : hoy;
+      N = Math.round((parseKey(hoy) - parseKey(startKey)) / 86400000) + 1;
+    }
+    var keys = allKeys.filter(function(k){ return k >= startKey && k <= hoy; });
+    var keysFood = keys.filter(function(k){ var s = dias[k]; return (s.n||0) > 0 || (s.q||0) > 0; });
+
+    var good = 0, entradas = 0, creDias = 0, scoopDias = 0, scoopSum = 0, burnSum = 0, burnDias = 0;
+    var acc = {p:{sum:0,low:0,high:0}, c:{sum:0,low:0,high:0}, g:{sum:0,low:0,high:0}, k:{sum:0,low:0,high:0}};
+    var rows = [];
+    keys.forEach(function(k){
+      var s = dias[k];
+      if(s.cr) creDias++;
+      if((s.q||0) > 0){ scoopDias++; scoopSum += s.q; }
+      if(s.b){ burnSum += s.b; burnDias++; }
+    });
+    keysFood.forEach(function(k){
+      var s = dias[k];
+      var pp = pct(s.p, s.tp), pc = pct(s.c, s.tc), pg = pct(s.g, s.tg), pk = pct(s.k, s.tk);
+      [['p',pp],['c',pc],['g',pg],['k',pk]].forEach(function(x){
+        var a = acc[x[0]]; a.sum += x[1];
+        if(x[1] < 90) a.low++;
+        if(x[1] > 115) a.high++;
+      });
+      var ok = pp >= 90 && pk >= 85 && pk <= 115;
+      if(ok) good++;
+      entradas += (s.n||0);
+      rows.push({k:k, pp:pp, pc:pc, pg:pg, pk:pk, ok:ok});
+    });
+    var reg = keysFood.length;
+
+    var rangeBtns = [[7,'7 días'],[30,'30 días'],[0,'Todo']].map(function(r){
+      return '<button class="btn statRange" data-r="'+r[0]+'" style="padding:7px 12px; font-size:13px;'+(range===r[0]?' background:var(--y); border-color:#111; font-weight:700;':'')+'">'+r[1]+'</button>';
+    }).join(' ');
+
+    var html = '<h3 style="font-size:20px; margin-bottom:8px;">📊 '+escapeHtml(m.nombre||'')+'</h3>' +
+      '<div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:12px;">'+rangeBtns+'</div>';
+
+    if(!allKeys.length){
+      html += '<p class="note">Todavía no hay registros de este cliente. Sus registros aparecen aquí cuando usa la app actualizada.</p>';
+    } else {
+      function macroRow(label, a){
+        var avg = reg ? Math.round(a.sum/reg) : 0;
+        return '<tr><td>'+label+'</td>' +
+          '<td>'+(reg ? avg+'%' : '—')+'</td>' +
+          '<td style="color:'+(a.low>0?'var(--warn)':'var(--text)')+'; font-weight:'+(a.low>0?'700':'400')+';">'+a.low+(a.low>0?' ⚠️':'')+'</td>' +
+          '<td>'+a.high+'</td></tr>';
+      }
+      html +=
+        '<div class="histStats">' +
+          '<div class="histStat"><div class="n">'+reg+'/'+N+'</div><div class="l">días que registró comida</div></div>' +
+          '<div class="histStat"><div class="n">'+good+'/'+N+'</div><div class="l">días que cumplió</div></div>' +
+        '</div>' +
+        '<p class="note" style="margin:-4px 0 10px;">Cumplió = proteína al 90% o más de su meta y calorías entre 85% y 115%. Registró '+entradas+' alimentos en este periodo.</p>' +
+        '<table class="statTable">' +
+          '<tr><th>Macro</th><th>Prom. de su meta</th><th>Días que le faltó (&lt;90%)</th><th>Días que se pasó (&gt;115%)</th></tr>' +
+          macroRow('Proteína', acc.p) + macroRow('Carbos', acc.c) + macroRow('Grasas', acc.g) + macroRow('Calorías', acc.k) +
+        '</table>' +
+        '<div class="histStats">' +
+          '<div class="histStat"><div class="n">'+creDias+'</div><div class="l">días con creatina</div></div>' +
+          '<div class="histStat"><div class="n">'+(scoopDias ? fmt(scoopSum/scoopDias,1) : '0')+'</div><div class="l">scoops promedio ('+scoopDias+' días)</div></div>' +
+          '<div class="histStat"><div class="n">'+(burnDias ? fmt(burnSum/burnDias) : '—')+'</div><div class="l">kcal de ejercicio promedio</div></div>' +
+        '</div>';
+      if(rows.length){
+        function cell(l, p){
+          return '<span style="margin-right:8px; color:'+(p<90?'var(--warn)':'var(--text)')+'; font-weight:'+(p<90?'700':'400')+';">'+l+' '+Math.round(p)+'%</span>';
+        }
+        html += '<h3 style="margin-top:6px;">Últimos días registrados</h3>' +
+          rows.slice(-14).reverse().map(function(r){
+            return '<div class="foodRow" style="font-size:12px; gap:4px; flex-wrap:wrap;"><span style="min-width:84px; text-transform:capitalize;">'+fmtDow(r.k)+'</span>' +
+              cell('P', r.pp) + cell('C', r.pc) + cell('G', r.pg) +
+              '<span style="margin-left:auto;">'+(r.ok?'✅':'—')+'</span></div>';
+          }).join('') +
+          '<p class="note" style="margin-top:6px;">Los porcentajes en rojo son macros que no llegaron al 90% de su meta ese día.</p>';
+      } else {
+        html += '<p class="note">En este periodo no registró comida.</p>';
+      }
+    }
+
+    openModal(html);
+    Array.prototype.forEach.call(document.querySelectorAll('.statRange'), function(b){
+      b.addEventListener('click', function(){ openStats(id, parseInt(b.getAttribute('data-r'), 10)); });
+    });
+  }
+
+  // ---------- encabezado: nombre ----------
   function clearHeaderWho(){
     document.getElementById('whoName').textContent = '';
-    document.getElementById('payBox').innerHTML = '';
   }
   function renderHeaderWho(){
     var name = (state.perfil && state.perfil.nombre) || (state.myMember && state.myMember.nombre) || '';
     document.getElementById('whoName').textContent = name;
-    var pagoSt = state.myMember ? paymentStatus(state.myMember) : null;
-    var box = document.getElementById('payBox');
-    if(!pagoSt){ box.innerHTML = ''; return; }
-    var msg;
-    if(pagoSt.overdue){
-      var dv = Math.abs(pagoSt.daysLeft);
-      msg = 'Mensualidad vencida hace ' + dv + ' día' + (dv===1?'':'s');
-    } else if(pagoSt.daysLeft === 0){
-      msg = 'Tu mensualidad vence hoy';
-    } else {
-      msg = 'Tu mensualidad vence en ' + pagoSt.daysLeft + ' día' + (pagoSt.daysLeft===1?'':'s');
-    }
-    box.innerHTML = '<span class="payBox'+((pagoSt.overdue||pagoSt.daysLeft===0)?' due':'')+'">💳 '+msg+'</span>';
+  }
+
+  // ---------- sincronizar con el entrenador ----------
+  var syncTimer = null, syncPending = {};
+
+  function daySummary(key){
+    if(!state.perfil) return null;
+    var entries = state.log[key] || [];
+    var cre = !!loadLocal('macros_creatina_v1', {})[key];
+    if(!entries.length && !cre) return null;
+    var burnStore = loadLocal('macros_burn_v1', {});
+    var burn = burnStore[key] != null ? burnStore[key] : (key === todayKey() ? (WORKOUT_KCAL_BY_WEEKDAY[new Date().getDay()] || 0) : 0);
+    var t = sumTotals(entries), tg = computeTargets(state.perfil, burn);
+    var scoops = 0, n = 0, meals = {};
+    entries.forEach(function(e){
+      if(e.nombre === PROTEIN_SCOOP_FOOD.nombre){ scoops = e.cantidad || 1; return; }
+      n++;
+      var mk = mealOf(e);
+      meals[mk] = (meals[mk]||0) + 1;
+    });
+    return {
+      k:Math.round(t.kcal), p:Math.round(t.proteina), c:Math.round(t.carbos), g:Math.round(t.grasa),
+      tk:Math.round(tg.kcal), tp:Math.round(tg.proteina), tc:Math.round(tg.carbos), tg:Math.round(tg.grasa),
+      b:Math.round(burn), q:scoops, cr:cre?1:0, n:n, m:meals
+    };
+  }
+
+  function pushDias(keys){
+    if(!state.db || !state.myMember || !state.perfil) return null;
+    var args = [];
+    keys.forEach(function(k){
+      var s = daySummary(k);
+      if(s){ args.push(new firebase.firestore.FieldPath('dias', k)); args.push(s); }
+    });
+    if(!args.length) return null;
+    try{
+      var ref = state.db.doc('miembros/'+state.myMember.id);
+      return ref.update.apply(ref, args).catch(function(){});
+    }catch(e){ return null; }
+  }
+
+  function syncDiaSoon(key){
+    if(!state.myMember) return;
+    syncPending[key] = true;
+    if(syncTimer) clearTimeout(syncTimer);
+    syncTimer = setTimeout(function(){
+      var ks = Object.keys(syncPending);
+      syncPending = {};
+      pushDias(ks);
+    }, 700);
+  }
+
+  function syncPerfil(){
+    if(!state.db || !state.myMember || !state.perfil) return;
+    try{
+      state.db.doc('miembros/'+state.myMember.id).update({perfil: state.perfil, perfilActualizado: Date.now()}).catch(function(){});
+    }catch(e){}
   }
 
   // ---------- app entry ----------
@@ -797,6 +1260,22 @@
     var now = new Date();
     state.histYear = now.getFullYear();
     state.histMonth = now.getMonth();
+
+    // enviar al entrenador los datos y registros (una sola vez el historial anterior)
+    if(state.myMember && state.perfil){
+      syncPerfil();
+      var flag = null;
+      try{ flag = localStorage.getItem('macros_sync_v1'); }catch(e){}
+      if(flag !== '1'){
+        var seen = {};
+        Object.keys(state.log).forEach(function(k){ seen[k] = true; });
+        Object.keys(loadLocal('macros_creatina_v1', {})).forEach(function(k){ seen[k] = true; });
+        var pr = pushDias(Object.keys(seen));
+        if(pr && pr.then) pr.then(function(){ try{ localStorage.setItem('macros_sync_v1', '1'); }catch(e){} });
+      } else {
+        syncDiaSoon(todayKey());
+      }
+    }
 
     if(state.isOwner && !state.perfil){ renderOwnerOnly(); } else if(!state.perfil){ renderOnboarding(); }
     else { renderMain(); }
@@ -828,7 +1307,7 @@
         '<div class="field"><label>Peso meta (kg, opcional)</label><input id="p_pesoMeta" type="number" value="'+(p.pesoMeta||'')+'"></div>' +
         '<div class="row2">' +
           '<div class="field"><label>Gramos de proteína por scoop</label><input id="p_scoopG" type="number" value="'+(p.scoopG||24)+'"></div>' +
-          '<div class="field"><label>Última pesada con tu entrenador (opcional)</label><input id="p_ultimaPesada" type="date" value="'+(p.ultimaPesada||'')+'"></div>' +
+          '<div class="field"><label>Última cita de medidas con tu entrenador (opcional)</label><input id="p_ultimaPesada" type="date" value="'+(p.ultimaPesada||'')+'"></div>' +
         '</div>' +
         '<div class="row2">' +
           '<div class="field"><label>Edad</label><input id="p_edad" type="number" value="'+(p.edad||'')+'"></div>' +
@@ -846,7 +1325,7 @@
           '<option value="recomp"'+(p.objetivo==='recomp'?' selected':'')+'>Recomposición (perder grasa y ganar músculo)</option>' +
         '</select></div>' +
         '<button class="btn btn-primary" id="saveOnboard" style="width:100%; margin-top:6px;">Calcular mis macros</button>' +
-        '<p class="note" style="margin-top:10px;">Tus datos se guardan solo en este celular, no en un servidor.</p>' +
+        '<p class="note" style="margin-top:10px;">Tus datos y tu resumen diario se guardan en tu celular y también los ve tu entrenador para darte seguimiento.</p>' +
       '</div>';
 
     document.getElementById('saveOnboard').addEventListener('click', function(){
@@ -866,6 +1345,8 @@
         objetivo: document.getElementById('p_objetivo').value
       };
       saveLocal('macros_perfil_v1', state.perfil);
+      syncPerfil();
+      syncDiaSoon(todayKey());
       renderMain();
     });
     if(state.isOwner) wireOwnerPanel();
@@ -918,12 +1399,13 @@
     var items = [
       {label:'Proteína', hexColor:'#111111', cur:totals.proteina, tgt:targets.proteina, unit:'g'},
       {label:'Carbos', hexColor:'#FFC400', cur:totals.carbos, tgt:targets.carbos, unit:'g'},
-      {label:'Grasas', hexColor:'#B58900', cur:totals.grasa, tgt:targets.grasa, unit:'g'}
+      {label:'Grasas', hexColor:'#B58900', cur:totals.grasa, tgt:targets.grasa, unit:'g'},
+      {label:'Calorías', hexColor:'#6B6A60', cur:totals.kcal, tgt:targets.kcal, unit:' kcal'}
     ];
     var html = '';
     items.forEach(function(it){
-      var pct = it.tgt ? (it.cur/it.tgt*100) : 0;
-      html += '<div class="gaugeItem">' + gaugeSvg(pct, it.hexColor) +
+      var p = it.tgt ? (it.cur/it.tgt*100) : 0;
+      html += '<div class="gaugeItem">' + gaugeSvg(p, it.hexColor) +
         '<div class="gaugeLabel">'+it.label+'</div>' +
         '<div class="gaugeSub">'+fmt(it.cur)+' / '+fmt(it.tgt)+it.unit+'</div>' +
       '</div>';
@@ -935,7 +1417,7 @@
   function todaysEntries(){
     return state.log[todayKey()] || [];
   }
-  function saveLog(){ saveLocal('macros_log_v1', state.log); }
+  function saveLog(){ saveLocal('macros_log_v1', state.log); syncDiaSoon(todayKey()); }
   function saveCache(){ saveLocal('macros_food_cache_v1', state.cache); }
 
   function sumTotals(entries){
@@ -963,6 +1445,7 @@
     var stored = loadLocal('macros_burn_v1', {});
     stored[todayKey()] = val;
     saveLocal('macros_burn_v1', stored);
+    syncDiaSoon(todayKey());
   }
 
   // ---------- racha e insignias ----------
@@ -1022,6 +1505,7 @@
     var key = todayKey();
     stored[key] = !stored[key];
     saveLocal('macros_creatina_v1', stored);
+    syncDiaSoon(key);
     renderMain();
   }
 
@@ -1053,50 +1537,25 @@
     var cre = todaysCreatina();
     var n = scoopsToday();
     var dosis = creatinaDosis();
-    var btns = [1,2,3].map(function(i){
-      var on = (n === i);
-      return '<button class="btn scoopOpt" data-n="'+i+'" style="padding:8px 14px; margin-left:6px;'+(on?' background:var(--y); border-color:#111; color:#111; font-weight:700;':'')+'">'+i+'</button>';
+    var boxes = [1,2,3].map(function(i){
+      return '<button class="checkBtn scoopOpt" data-n="'+i+'" title="Scoop '+i+'">'+(n>=i?'✅':'◻️')+'</button>';
     }).join('');
     return '<div class="card">' +
       '<h3>Suplementos de hoy</h3>' +
       '<div class="checkRow"><span>Creatina: <b>'+(dosis!=null?fmt(dosis,1):'—')+' g</b> hoy</span><button class="checkBtn" id="creatinaBtn">'+(cre?'✅':'◻️')+'</button></div>' +
-      '<div class="checkRow"><span>Proteína en polvo (scoops de 35 g)</span><span>'+btns+'</span></div>' +
-      '<p class="note" style="margin-top:8px;">Cada scoop suma '+fmt(PROTEIN_SCOOP_FOOD.kcal)+' kcal, '+fmt(PROTEIN_SCOOP_FOOD.proteina)+'g proteína, '+fmt(PROTEIN_SCOOP_FOOD.carbos)+'g carbos y '+fmt(PROTEIN_SCOOP_FOOD.grasa)+'g grasa a tus macros de hoy. Toca de nuevo el número activo para quitarlo. La creatina se calcula con 0.07 g por kg de tu peso.</p>' +
+      '<div class="checkRow"><span>Proteína en polvo: <b>'+n+' de 3</b> scoops</span><span>'+boxes+'</span></div>' +
+      '<p class="note" style="margin-top:8px;">Marca una casilla por cada scoop (35 g) que tomes. Cada scoop suma '+fmt(PROTEIN_SCOOP_FOOD.kcal)+' kcal, '+fmt(PROTEIN_SCOOP_FOOD.proteina)+'g proteína, '+fmt(PROTEIN_SCOOP_FOOD.carbos)+'g carbos y '+fmt(PROTEIN_SCOOP_FOOD.grasa)+'g grasa a tus macros de hoy. La creatina se calcula con 0.07 g por kg de tu peso.</p>' +
     '</div>';
   }
 
-  // ---------- pago mensual ----------
-  function clampDay(year, monthIndex, day){
-    var last = new Date(year, monthIndex+1, 0).getDate();
-    return Math.min(day, last);
-  }
-  function nextPaymentDate(m){
-    if(!m.diaPago) return null;
-    var base = new Date(m.ultimoPago || m.creadoEn || Date.now());
-    var y = base.getFullYear(), mo = base.getMonth()+1;
-    return new Date(y, mo, clampDay(y, mo, m.diaPago));
-  }
-  function paymentStatus(m){
-    var due = nextPaymentDate(m);
-    if(!due) return null;
-    var days = Math.ceil((due - new Date()) / 86400000);
-    return {due:due, daysLeft:days, overdue: days < 0};
-  }
-  function paymentBadgeHtml(m){
-    var st = paymentStatus(m);
-    if(!st) return '<span class="note">sin día de pago</span>';
-    if(st.overdue) return '<span class="tag" style="color:var(--warn); border-color:var(--warn);">Vencido hace '+Math.abs(st.daysLeft)+' día'+(Math.abs(st.daysLeft)===1?'':'s')+' ⚠️</span>';
-    if(st.daysLeft === 0) return '<span class="tag" style="color:var(--fat); border-color:var(--fat);">Vence hoy</span>';
-    return '<span class="note">Vence en '+st.daysLeft+' día'+(st.daysLeft===1?'':'s')+'</span>';
-  }
-
-  // ---------- próxima pesada con el entrenador ----------
+  // ---------- próxima cita para tomar medidas ----------
   function nextWeighInInfo(){
     var p = state.perfil;
     var anchor = p.ultimaPesada ? new Date(p.ultimaPesada+'T00:00:00').getTime() : (p.createdAt || Date.now());
     var daysSince = Math.floor((Date.now()-anchor)/86400000);
-    if(daysSince >= 30) return {due:true, msg:'Ya te toca pesarte con tu entrenador — llevas '+daysSince+' días desde tu última pesada.'};
-    return {due:false, msg:'Tu próxima pesada con tu entrenador es en aprox. '+(30-daysSince)+' días.'};
+    if(daysSince >= 30) return {due:true, msg:'Ya te toca tu cita para tomar medidas — llevas '+daysSince+' días desde la última.'};
+    var left = 30 - daysSince;
+    return {due:false, msg:'Tu próxima cita para tomar medidas es en '+left+' día'+(left===1?'':'s')+'.'};
   }
 
   // ---------- historial mensual / anual ----------
@@ -1281,7 +1740,7 @@
         '<div class="field"><label>¿Qué comiste?</label><input id="food_'+meal.k+'" list="foodOptions" placeholder="Ej. chilaquiles verdes con pollo" autocomplete="off"></div>' +
         '<div class="field qtyField"><label>Cant.</label><input id="qty_'+meal.k+'" type="number" value="1" min="0.25" step="0.25"></div>' +
       '</div>' +
-      '<button class="btn btn-primary addFoodBtn" data-meal="'+meal.k+'" style="width:100%; margin-top:8px;">Agregar</button>' +
+      '<button class="btn btn-primary searchFoodBtn" data-meal="'+meal.k+'" style="width:100%; margin-top:8px;">Buscar</button>' +
       '<div class="estArea" id="est_'+meal.k+'"></div>' +
     '</div>';
   }
@@ -1317,15 +1776,14 @@
     el.innerHTML =
       (state.isOwner ? renderOwnerPanel() : '') +
       renderSupplementsCard() +
-      '<div class="weighNote'+(weighIn.due?' due':'')+'">⚖️ ' + weighIn.msg + '</div>' +
+      '<div class="weighNote'+(weighIn.due?' due':'')+'">📏 ' + weighIn.msg + '</div>' +
       datalist +
       mealsHtml +
       '<div class="card">' +
-        '<h3>¿Cuántas calorías usaste hoy?</h3>' +
-        '<div style="font-family:\'Big Shoulders Display\'; font-weight:700; font-size:30px;">' + fmt(totals.kcal) + ' <span style="font-size:15px; color:var(--text-muted); font-family:\'Work Sans\';">/ ' + fmt(targets.kcal) + ' kcal</span></div>' +
-        '<p class="note" style="margin-top:4px;">Base: '+fmt(targets.baseKcal)+' kcal + entreno de hoy: '+fmt(targets.burnHoy)+' kcal · metabolismo basal: '+fmt(targets.bmr)+' kcal ('+targets.bmrFuente+')</p>' +
-        '<div class="field" style="margin-top:10px;"><label>¿Cuántas calorías quemaste el día de hoy? — '+WORKOUT_LABEL_BY_WEEKDAY[weekday]+'</label><input id="burnInput" type="number" value="'+burnHoy+'"></div>' +
+        '<h3>¿Cuántas calorías usaste en tu ejercicio de hoy en Titanes?</h3>' +
+        '<div class="field"><label>Calorías quemadas hoy — '+WORKOUT_LABEL_BY_WEEKDAY[weekday]+'</label><input id="burnInput" type="number" value="'+burnHoy+'"></div>' +
         '<p class="note">Ajústalo si tu reloj o banda midió otro número.</p>' +
+        '<p class="note" style="margin-top:6px;">Tu meta de hoy: '+fmt(targets.kcal)+' kcal = base '+fmt(targets.baseKcal)+' + ejercicio '+fmt(targets.burnHoy)+' · metabolismo basal: '+fmt(targets.bmr)+' kcal ('+targets.bmrFuente+')</p>' +
         weeksNote +
         tipHtml +
       '</div>' +
@@ -1339,8 +1797,8 @@
 
     if(state.isOwner) wireOwnerPanel();
     document.getElementById('editProfileBtn').addEventListener('click', renderOnboarding);
-    Array.prototype.forEach.call(document.querySelectorAll('.addFoodBtn'), function(b){
-      b.addEventListener('click', function(){ handleAddFood(b.getAttribute('data-meal')); });
+    Array.prototype.forEach.call(document.querySelectorAll('.searchFoodBtn'), function(b){
+      b.addEventListener('click', function(){ handleSearchFood(b.getAttribute('data-meal')); });
     });
     Array.prototype.forEach.call(document.querySelectorAll('.fdel'), function(btn){
       btn.addEventListener('click', function(){
@@ -1355,8 +1813,9 @@
     document.getElementById('creatinaBtn').addEventListener('click', toggleCreatina);
     Array.prototype.forEach.call(document.querySelectorAll('.scoopOpt'), function(b){
       b.addEventListener('click', function(){
-        var n = parseInt(b.getAttribute('data-n'), 10);
-        setProteinScoops(scoopsToday() === n ? 0 : n);
+        var i = parseInt(b.getAttribute('data-n'), 10);
+        var n = scoopsToday();
+        setProteinScoops(n >= i ? i-1 : i);
       });
     });
     document.getElementById('burnInput').addEventListener('change', function(){
@@ -1381,16 +1840,16 @@
     renderMain();
   }
 
-  async function handleAddFood(meal){
+  // Buscar: primero busca el alimento; después aparece el botón Agregar
+  async function handleSearchFood(meal){
     var nombre = (document.getElementById('food_'+meal).value || '').trim();
-    var cantidad = parseFloat(document.getElementById('qty_'+meal).value) || 1;
-    if(!nombre) return;
+    if(!nombre){ showToast('Escribe qué comiste.', true); return; }
     var per = findFood(nombre);
-    if(per){ addEntry(nombre, cantidad, per, meal); return; }
-
     Array.prototype.forEach.call(document.querySelectorAll('.estArea'), function(a){ a.innerHTML = ''; });
+    if(per){ showFoodResult(nombre, per, meal, 'known'); return; }
+
     var area = document.getElementById('est_'+meal);
-    area.innerHTML = '<p class="note" style="margin-top:10px;">🤖 Consultando la IA sobre "'+escapeHtml(nombre)+'"…</p>';
+    area.innerHTML = '<p class="note" style="margin-top:10px;">🤖 Buscando "'+escapeHtml(nombre)+'"…</p>';
 
     var est = null;
     try{
@@ -1413,18 +1872,22 @@
     }catch(e){ est = null; }
 
     if(est){
-      showEstimateForm(nombre, cantidad, est, meal);
+      showFoodResult(nombre, est, meal, 'ia');
       return;
     }
-
-    showEstimateForm(nombre, cantidad, {kcal:'', proteina:'', carbos:'', grasa:''}, meal);
+    showFoodResult(nombre, {kcal:'', proteina:'', carbos:'', grasa:''}, meal, 'manual');
   }
 
-  function showEstimateForm(nombre, cantidad, est, meal){
+  function showFoodResult(nombre, est, meal, origen){
     var area = document.getElementById('est_'+meal);
+    if(!area) return;
+    var msg;
+    if(origen === 'known') msg = '✅ Encontrado — macros de "'+escapeHtml(nombre)+'" por porción:';
+    else if(origen === 'ia') msg = '🤖 Esto estimó la IA para "'+escapeHtml(nombre)+'" (por porción) — revisa los números:';
+    else msg = 'No lo encontré — escribe los macros de "'+escapeHtml(nombre)+'" (por porción):';
     area.innerHTML =
       '<div class="estimateBox">' +
-        '<p class="note" style="margin:0 0 8px;">No estaba en la lista — revisa o completa los macros de "'+escapeHtml(nombre)+'" (por porción):</p>' +
+        '<p class="note" style="margin:0 0 8px;">'+msg+'</p>' +
         '<div class="row2">' +
           '<div class="field"><label>Kcal</label><input id="e_kcal" type="number" value="'+est.kcal+'"></div>' +
           '<div class="field"><label>Proteína (g)</label><input id="e_proteina" type="number" value="'+est.proteina+'"></div>' +
@@ -1433,8 +1896,7 @@
           '<div class="field"><label>Carbos (g)</label><input id="e_carbos" type="number" value="'+est.carbos+'"></div>' +
           '<div class="field"><label>Grasa (g)</label><input id="e_grasa" type="number" value="'+est.grasa+'"></div>' +
         '</div>' +
-        '<label style="display:flex; align-items:center; gap:6px; font-size:12.5px; margin-bottom:10px;"><input type="checkbox" id="e_save" checked style="width:auto;"> Guardar en mi lista para la próxima vez</label>' +
-        '<button class="btn btn-primary" id="e_confirm" style="width:100%;">Agregar</button>' +
+        '<button class="btn btn-primary" id="e_confirm" style="width:100%; margin-top:4px;">Agregar</button>' +
       '</div>';
     document.getElementById('e_confirm').addEventListener('click', function(){
       var per = {
@@ -1443,11 +1905,17 @@
         carbos: parseFloat(document.getElementById('e_carbos').value)||0,
         grasa: parseFloat(document.getElementById('e_grasa').value)||0
       };
-      if(document.getElementById('e_save').checked){
-        state.cache[nombre.trim().toLowerCase()] = per;
-        saveCache();
-      }
+      var qtyEl = document.getElementById('qty_'+meal);
+      var cantidad = qtyEl ? (parseFloat(qtyEl.value) || 1) : 1;
       addEntry(nombre, cantidad, per, meal);
+      if(origen !== 'known'){
+        showChoice('¿Quieres guardarlo para ponerlo otro día?', 'Sí, guardar', 'No', function(){
+          state.cache[nombre.trim().toLowerCase()] = per;
+          saveCache();
+          renderMain();
+          showToast('Guardado en tu lista.', false);
+        });
+      }
     });
   }
 
