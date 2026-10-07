@@ -120,7 +120,8 @@
   .topBarHead{display:flex; align-items:flex-start; justify-content:space-between; padding:0 14px 6px;}
   .titleRow{display:flex; align-items:center; gap:8px;}
   .topBarHead h1{font-size:19px; font-weight:800;}
-  .logoImg{width:34px; height:34px; border-radius:50%; object-fit:cover; display:block;}
+  .logoImg{width:46px; height:46px; border-radius:50%; object-fit:cover; display:block;}
+  .headRight{display:flex; align-items:center; gap:4px;}
   .topBarHead .sub{font-size:11px; color:var(--text-muted);}
   .who{font-size:13px; font-weight:700; margin-top:2px;}
   .gearBtn{background:none; border:none; color:var(--text-muted); font-size:16px; padding:4px;}
@@ -178,12 +179,14 @@
       <div>
         <div class="titleRow">
           <h1>RETO TITANES</h1>
-          <img src="logo.png" alt="Titanes" class="logoImg" onerror="this.style.display='none'">
         </div>
         <div class="sub" id="dateLabel"></div>
         <div class="who" id="whoName"></div>
       </div>
-      <button class="gearBtn" id="ownerGear" title="Configuración" style="display:none;">⚙️</button>
+      <div class="headRight">
+        <button class="gearBtn" id="ownerGear" title="Configuración" style="display:none;">⚙️</button>
+        <img src="logo.png" alt="Titanes" class="logoImg" onerror="this.style.display='none'">
+      </div>
     </div>
     <div class="gaugeRow" id="gaugeRow"></div>
   </div>
