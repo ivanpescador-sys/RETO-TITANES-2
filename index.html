@@ -1220,7 +1220,7 @@
     return {
       k:Math.round(t.kcal), p:Math.round(t.proteina), c:Math.round(t.carbos), g:Math.round(t.grasa),
       tk:Math.round(tg.kcal), tp:Math.round(tg.proteina), tc:Math.round(tg.carbos), tg:Math.round(tg.grasa),
-      b:Math.round(burn), q:scoops, cr:cre?1:0, n:n, m:meals
+      b:Math.round(burn), q:scoops, cr:cre?1:0, n:n, m:meals, e:entries
     };
   }
 
@@ -1262,6 +1262,13 @@
     document.getElementById('app').classList.remove('hidden');
     document.getElementById('dateLabel').textContent = new Date().toLocaleDateString('es-MX', {weekday:'long', day:'numeric', month:'long'});
 
+    if(!window._unsavedGuard){
+      window._unsavedGuard = true;
+      window.addEventListener('beforeunload', function(e){
+        if(formDirty){ e.preventDefault(); e.returnValue = ''; }
+      });
+    }
+
     if(state.isOwner){
       document.getElementById('ownerGear').style.display = 'inline-block';
       document.getElementById('ownerGear').addEventListener('click', openOwnerSettings);
@@ -1274,34 +1281,96 @@
     state.histYear = now.getFullYear();
     state.histMonth = now.getMonth();
 
-    // enviar al entrenador los datos y registros (una sola vez el historial anterior)
+    // nuevo celular: recupera perfil e historial de la nube
+    if(!state.perfil && state.myMember && state.myMember.perfil){
+      restoreFromCloud(state.myMember);
+    }
+
     if(state.myMember && state.perfil){
       syncPerfil();
       var flag = null;
-      try{ flag = localStorage.getItem('macros_sync_v1'); }catch(e){}
+      try{ flag = localStorage.getItem('macros_sync_v2'); }catch(e){}
       if(flag !== '1'){
         var seen = {};
         Object.keys(state.log).forEach(function(k){ seen[k] = true; });
         Object.keys(loadLocal('macros_creatina_v1', {})).forEach(function(k){ seen[k] = true; });
         var pr = pushDias(Object.keys(seen));
-        if(pr && pr.then) pr.then(function(){ try{ localStorage.setItem('macros_sync_v1', '1'); }catch(e){} });
+        var marcar = function(){ try{ localStorage.setItem('macros_sync_v2', '1'); }catch(e){} };
+        if(pr && pr.then) pr.then(marcar); else marcar();
       } else {
         syncDiaSoon(todayKey());
       }
     }
 
-    if(state.isOwner && !state.perfil){ renderOwnerOnly(); } else if(!state.perfil){ renderOnboarding(); }
+    if(state.isOwner && !state.perfil){ renderOwnerOnly(); }
+    else if(!state.perfil){ renderOnboarding(); }
     else { renderMain(); }
   }
-
-  function renderOwnerOnly(){
+ function renderOwnerOnly(){
     clearHeaderWho();
     document.getElementById('gaugeRow').innerHTML = '';
     document.getElementById('main').innerHTML = renderOwnerPanel();
     wireOwnerPanel();
   }
 
-  // ---------- onboarding ----------
+  // ---------- edad automática desde fecha de nacimiento ----------
+  function edadDesde(fechaKey){
+    if(!fechaKey) return null;
+    var n = parseKey(fechaKey), h = new Date();
+    var e = h.getFullYear() - n.getFullYear();
+    var m = h.getMonth() - n.getMonth();
+    if(m < 0 || (m === 0 && h.getDate() < n.getDate())) e--;
+    return e >= 0 ? e : null;
+  }
+
+  // ---------- control de cambios sin guardar ----------
+  var formDirty = false, formSnapshot = '';
+
+  function formValues(){
+    function v(id){ var el = document.getElementById(id); return el ? el.value : ''; }
+    return {
+      nombre: v('p_nombre'), peso: v('p_peso'), estatura: v('p_estatura'),
+      pesoMeta: v('p_pesoMeta'), scoopG: v('p_scoopG'), ultimaPesada: v('p_ultimaPesada'),
+      fechaNac: v('p_fechaNac'), bmrManual: v('p_bmrManual'), dias: v('p_dias'),
+      sexo: v('p_sexo'), objetivo: v('p_objetivo')
+    };
+  }
+
+  function refreshEdad(){
+    var el = document.getElementById('p_edadShow');
+    if(!el) return;
+    var e = edadDesde(document.getElementById('p_fechaNac').value);
+    el.textContent = (e == null) ? 'Edad: se calcula al elegir tu fecha de nacimiento' : 'Edad: ' + e + ' años (se calcula sola)';
+  }
+
+  // ---------- guardar en la nube ----------
+  function saveToCloud(){
+    if(!state.myMember) return Promise.resolve(true);
+    if(!state.db) return Promise.resolve(false);
+    return state.db.doc('miembros/' + state.myMember.id)
+      .update({perfil: state.perfil, perfilActualizado: Date.now()})
+      .then(function(){ return true; })
+      .catch(function(){ return false; });
+  }
+
+  // ---------- restaurar perfil e historial desde la nube (nuevo celular) ----------
+  function restoreFromCloud(m){
+    state.perfil = m.perfil;
+    saveLocal('macros_perfil_v1', state.perfil);
+    var dias = m.dias || {};
+    var burn = loadLocal('macros_burn_v1', {});
+    var cre = loadLocal('macros_creatina_v1', {});
+    Object.keys(dias).forEach(function(k){
+      var s = dias[k] || {};
+      if(s.e && !state.log[k]) state.log[k] = s.e;
+      if(s.b != null && burn[k] == null) burn[k] = s.b;
+      if(s.cr) cre[k] = true;
+    });
+    saveLocal('macros_log_v1', state.log);
+    saveLocal('macros_burn_v1', burn);
+    saveLocal('macros_creatina_v1', cre);
+  }
+
   function renderOnboarding(){
     var el = document.getElementById('main');
     document.getElementById('gaugeRow').innerHTML = '';
@@ -1313,65 +1382,105 @@
     }).join('');
     el.innerHTML =
       (state.isOwner ? renderOwnerPanel() : '') +
-      '<div class="card">' +
-        '<h3>Antes de empezar</h3>' +
-        (state.isOwner ? '<p class="note" style="margin-top:-4px;">Esto es para llevar tu propio seguimiento de macros (opcional). No es necesario para administrar a tus clientes — eso ya lo tienes arriba, en el panel del entrenador.</p>' : '') +
+      '<div class="card" id="onboardCard">' +
+        '<h3>'+(state.perfil ? 'Mis datos' : 'Antes de empezar')+'</h3>' +
+        (state.isOwner ? '<p class="note" style="margin-top:-4px;">Esto es para llevar tu propio seguimiento de macros (opcional). No es necesario para administrar a tus clientes.</p>' : '') +
         '<div class="field"><label>Tu nombre</label><input id="p_nombre" type="text" value="'+escapeHtml(p.nombre||'')+'"></div>' +
         '<div class="row2">' +
           '<div class="field"><label>Peso (kg)</label><input id="p_peso" type="number" value="'+(p.peso||'')+'"></div>' +
           '<div class="field"><label>Estatura (cm)</label><input id="p_estatura" type="number" value="'+(p.estatura||'')+'"></div>' +
         '</div>' +
-        '<div class="field"><label>Peso meta (kg, opcional)</label><input id="p_pesoMeta" type="number" value="'+(p.pesoMeta||'')+'"></div>' +
         '<div class="row2">' +
-          '<div class="field"><label>Gramos de proteína por scoop</label><input id="p_scoopG" type="number" value="'+(p.scoopG||24)+'"></div>' +
-          '<div class="field"><label>Última cita de medidas con tu entrenador (opcional)</label><input id="p_ultimaPesada" type="date" value="'+(p.ultimaPesada||'')+'"></div>' +
-        '</div>' +
-        '<div class="row2">' +
-          '<div class="field"><label>Edad</label><input id="p_edad" type="number" value="'+(p.edad||'')+'"></div>' +
+          '<div class="field"><label>Fecha de nacimiento</label><input id="p_fechaNac" type="date" value="'+escapeHtml(p.fechaNac||'')+'"></div>' +
           '<div class="field"><label>Sexo (para el cálculo)</label><select id="p_sexo">' +
             '<option value="mujer"'+(p.sexo!=='hombre'?' selected':'')+'>Mujer</option>' +
             '<option value="hombre"'+(p.sexo==='hombre'?' selected':'')+'>Hombre</option>' +
           '</select></div>' +
         '</div>' +
+        '<p class="note" id="p_edadShow" style="margin:-4px 0 12px; font-size:13px; color:var(--text);"></p>' +
+        '<div class="field"><label>Peso meta (kg, opcional)</label><input id="p_pesoMeta" type="number" value="'+(p.pesoMeta||'')+'"></div>' +
+        '<div class="row2">' +
+      '<div class="field"><label>Gramos de proteína por scoop</label><input id="p_scoopG" type="number" value="'+(p.scoopG||24)+'"></div>' +
+          '<div class="field"><label>Última cita de medidas (opcional)</label><input id="p_ultimaPesada" type="date" value="'+(p.ultimaPesada||'')+'"></div>' +
+        '</div>' +
         '<div class="field"><label>¿Cuántos días entrenas a la semana en Titanes?</label><select id="p_dias">'+diasOpts+'</select></div>' +
         '<p class="note" style="margin:-6px 0 12px;">Con esto se calcula tu meta de calorías fija (de lunes a domingo). El ejercicio que registres cada día no la cambia.</p>' +
         '<div class="field"><label>Metabolismo basal medido por tu entrenador (kcal/d, opcional)</label><input id="p_bmrManual" type="number" placeholder="Déjalo en blanco si no lo tienes" value="'+(p.bmrManual||'')+'"></div>' +
-        '<p class="note" style="margin:-6px 0 12px;">Si tu entrenador te dio este dato con su báscula de bioimpedancia, tus calorías y macros se calculan con ese número real en vez de la fórmula estimada.</p>' +
         '<div class="field"><label>Objetivo</label><select id="p_objetivo">' +
           '<option value="bajar"'+(p.objetivo==='bajar'||!p.objetivo?' selected':'')+'>Bajar de peso</option>' +
           '<option value="ganar"'+(p.objetivo==='ganar'?' selected':'')+'>Ganar masa muscular</option>' +
           '<option value="mantener"'+(p.objetivo==='mantener'?' selected':'')+'>Mantenerme</option>' +
           '<option value="recomp"'+(p.objetivo==='recomp'?' selected':'')+'>Recomposición (perder grasa y ganar músculo)</option>' +
         '</select></div>' +
-        '<button class="btn btn-primary" id="saveOnboard" style="width:100%; margin-top:6px;">Calcular mis macros</button>' +
-        '<p class="note" style="margin-top:10px;">Tus datos y tu resumen diario se guardan en tu celular y también los ve tu entrenador para darte seguimiento.</p>' +
+        '<button class="btn btn-primary" id="saveOnboard" style="width:100%; margin-top:6px;">Guardar cambios</button>' +
+        (state.perfil ? '<button class="btn btn-ghost" id="closeOnboard" style="width:100%; margin-top:6px;">Cerrar</button>' : '') +
+        '<p class="note" style="margin-top:10px;">Tus datos y tu resumen diario se guardan en la nube, así los ves en cualquier celular.</p>' +
       '</div>';
 
-    document.getElementById('saveOnboard').addEventListener('click', function(){
-      var nombre = document.getElementById('p_nombre').value.trim();
-      var peso = parseFloat(document.getElementById('p_peso').value);
-      var estatura = parseFloat(document.getElementById('p_estatura').value);
-      var edad = parseFloat(document.getElementById('p_edad').value);
-      if(!nombre || !peso || !estatura || !edad){ showToast('Completa todos los campos.', true); return; }
+    refreshEdad();
+    formSnapshot = JSON.stringify(formValues());
+    formDirty = false;
+
+    var card = document.getElementById('onboardCard');
+    function onChange(){
+      refreshEdad();
+      formDirty = JSON.stringify(formValues()) !== formSnapshot;
+    }
+    card.addEventListener('input', onChange);
+    card.addEventListener('change', onChange);
+
+    var closeBtn = document.getElementById('closeOnboard');
+    if(closeBtn){
+      closeBtn.addEventListener('click', function(){
+        if(!formDirty){ renderMain(); return; }
+        showChoice('¿Seguro que quiere salir sin guardar?', 'Sí, salir', 'Seguir editando', function(){
+          formDirty = false;
+          renderMain();
+        });
+      });
+    }
+
+    document.getElementById('saveOnboard').addEventListener('click', async function(){
+      var f = formValues();
+      var nombre = f.nombre.trim();
+      var peso = parseFloat(f.peso);
+      var estatura = parseFloat(f.estatura);
+      var edad = edadDesde(f.fechaNac);
+      if(!nombre || !peso || !estatura || edad == null){
+        showToast('Completa nombre, peso, estatura y fecha de nacimiento.', true);
+        return;
+      }
       state.perfil = {
-        nombre:nombre, peso:peso, estatura:estatura, edad:edad,
-        pesoMeta: parseFloat(document.getElementById('p_pesoMeta').value) || null,
-        scoopG: parseFloat(document.getElementById('p_scoopG').value) || 24,
-        ultimaPesada: document.getElementById('p_ultimaPesada').value || null,
-        bmrManual: parseFloat(document.getElementById('p_bmrManual').value) || null,
-        diasEntreno: parseInt(document.getElementById('p_dias').value, 10) || DEFAULT_TRAIN_DAYS,
-        createdAt: (state.perfil && state.perfil.createdAt) || Date.now(),
-        sexo: document.getElementById('p_sexo').value,
-        objetivo: document.getElementById('p_objetivo').value
+        nombre: nombre, peso: peso, estatura: estatura,
+        fechaNac: f.fechaNac, edad: edad,
+        pesoMeta: parseFloat(f.pesoMeta) || null,
+        scoopG: parseFloat(f.scoopG) || 24,
+        ultimaPesada: f.ultimaPesada || null,
+        bmrManual: parseFloat(f.bmrManual) || null,
+        diasEntreno: parseInt(f.dias, 10) || DEFAULT_TRAIN_DAYS,
+        createdAt: (p && p.createdAt) || Date.now(),
+        sexo: f.sexo, objetivo: f.objetivo
       };
       saveLocal('macros_perfil_v1', state.perfil);
-      syncPerfil();
+
+      var btn = document.getElementById('saveOnboard');
+      btn.disabled = true; btn.textContent = 'Guardando…';
+      var ok = await saveToCloud();
+      btn.disabled = false; btn.textContent = 'Guardar cambios';
+
+      if(!ok){
+        showToast('Se guardó en este celular, pero no se pudo subir a la nube. Revisa tu conexión y vuelve a guardar.', true);
+        return;
+      }
+      formDirty = false;
       syncDiaSoon(todayKey());
+      showToast('Cambios guardados ✅', false);
       renderMain();
     });
+
     if(state.isOwner) wireOwnerPanel();
   }
-
+        
   // ---------- targets: META CALÓRICA FIJA ----------
   // Kcal_meta = TDEE x (1 - déficit); TDEE = BMR x factor de actividad (días de entreno por semana).
   // El ejercicio registrado cada día NO modifica kcal ni macros.
