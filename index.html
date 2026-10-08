@@ -738,7 +738,7 @@
       var m = state.miembros[id];
       var devCount = (m.dispositivos||[]).length;
       var devTag = devCount > 1
-        ? '<span class="tag" style="color:var(--fat); border-color:var(--fat); margin-left:6px;">'+devCount+' dispositivos ⚠️</span>'
+        ? '<span class="tag" style="color:var(--fat); border-color:var(--fat); margin-left:6px; white-space:nowrap; display:inline-block;">'+devCount+' disp. ⚠️</span>'
         : (devCount === 1 ? '<span class="note" style="margin-left:6px;">1 dispositivo</span>' : '');
       var tel = m.telefono
         ? '📞 <a href="tel:'+escapeHtml(m.telefono)+'">'+escapeHtml(m.telefono)+'</a> · <a href="https://wa.me/'+phoneDigits(m.telefono)+'" target="_blank" rel="noopener">WhatsApp</a>'
