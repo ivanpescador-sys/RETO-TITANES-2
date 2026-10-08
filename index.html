@@ -194,7 +194,7 @@
   <div id="main"></div>
 
   <div class="card" style="margin-top:0;">
-    <p class="note">Creatina monohidratada: 0.07 g por kg de peso al día. Tu meta de calorías es fija: se calcula con la fórmula Mifflin-St Jeor, tus días de entrenamiento a la semana y un déficit, y no cambia por el ejercicio que registres cada día. Son una referencia de tu entrenador, no sustituyen a un nutriólogo certificado.</p>
+    <p class="note">Creatina monohidratada: 0.07 g por kg de peso al día. Tu meta de calorías es fija: se calcula con tu metabolismo basal (de la báscula o, si no la capturaste, con la fórmula Mifflin-St Jeor), tus días de entrenamiento a la semana y un déficit, y no cambia por el ejercicio que registres cada día. Son una referencia de tu entrenador, no sustituyen a un nutriólogo certificado.</p>
   </div>
 </div>
 
@@ -251,7 +251,7 @@
   };
 
   // ---- Modelo de meta calórica FIJA ----
-  // TDEE = BMR (Mifflin-St Jeor) x factor de actividad según días de entreno por semana
+  // TDEE = BMR (báscula si se capturó; si no, Mifflin-St Jeor) x factor de actividad según días de entreno por semana
   var ACTIVITY_FACTORS = { 1:1.2, 2:1.375, 3:1.55, 4:1.65, 5:1.725, 6:1.8 };
   var DEFAULT_TRAIN_DAYS = 3;
   var PROTEIN_G_PER_KG = 2.1;  // rango 2.0 - 2.2 g/kg
@@ -489,7 +489,10 @@
               if(!appHidden()) renderOwnerPanelIfVisible();
             }
           }
-          else { checkAccess(); }
+          else {
+            checkAccess();
+            refreshMyMember();
+          }
         }, function(){ if(!state.isOwner) renderGate('signin'); });
       }catch(e){ if(!state.isOwner) renderGate('signin'); }
     }
@@ -499,6 +502,15 @@
   }
 
   function appHidden(){ return document.getElementById('app').classList.contains('hidden'); }
+
+  // el cliente recibe en vivo los cambios del entrenador (nota, datos)
+  function refreshMyMember(){
+    if(state.isOwner || !state.myMember) return;
+    var fresh = state.miembros[state.myMember.id];
+    if(!fresh) return;
+    state.myMember = Object.assign({id: state.myMember.id}, fresh);
+    updateCoachNote();
+  }
 
   function findMemberByCode(code){
     var ids = Object.keys(state.miembros||{});
@@ -1016,6 +1028,44 @@
     wireOwnerPanel();
   }
 
+  // ---------- gráfica de peso (cliente y entrenador) ----------
+  function weightChartHtml(hist, meta){
+    var pts = (hist||[]).filter(function(x){ return x && x.f && x.p; })
+      .sort(function(a,b){ return a.f < b.f ? -1 : (a.f > b.f ? 1 : 0); });
+    if(pts.length < 2){
+      return '<p class="note">Con al menos dos registros de peso aparecerá aquí la gráfica. Cada vez que se registra el peso se agrega un punto.</p>';
+    }
+    var W = 340, H = 150, padL = 34, padR = 10, padT = 12, padB = 22;
+    var vals = pts.map(function(x){ return x.p; });
+    if(meta) vals.push(meta);
+    var min = Math.min.apply(null, vals) - 1, max = Math.max.apply(null, vals) + 1;
+    var innerW = W - padL - padR, innerH = H - padT - padB;
+    function X(i){ return padL + i*innerW/(pts.length-1); }
+    function Y(v){ return padT + (1 - (v-min)/(max-min))*innerH; }
+
+    var d = pts.map(function(x,i){ return (i?'L':'M')+X(i).toFixed(1)+','+Y(x.p).toFixed(1); }).join(' ');
+    var svg = '<path d="'+d+'" fill="none" stroke="#111111" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"></path>';
+    svg += pts.map(function(x,i){
+      return '<circle cx="'+X(i).toFixed(1)+'" cy="'+Y(x.p).toFixed(1)+'" r="3" fill="#FFC400" stroke="#111111" stroke-width="1"></circle>';
+    }).join('');
+    svg += '<text x="'+(padL-4)+'" y="'+(padT+4)+'" text-anchor="end" font-size="10" fill="#6B6A60">'+max.toFixed(0)+'</text>';
+    svg += '<text x="'+(padL-4)+'" y="'+(H-padB)+'" text-anchor="end" font-size="10" fill="#6B6A60">'+min.toFixed(0)+'</text>';
+    if(meta){
+      svg += '<line x1="'+padL+'" y1="'+Y(meta).toFixed(1)+'" x2="'+(W-padR)+'" y2="'+Y(meta).toFixed(1)+'" stroke="#B58900" stroke-width="1" stroke-dasharray="4,3"></line>';
+    }
+    svg += '<text x="'+padL+'" y="'+(H-4)+'" font-size="10" fill="#6B6A60">'+fmtDay(pts[0].f)+'</text>';
+    svg += '<text x="'+(W-padR)+'" y="'+(H-4)+'" text-anchor="end" font-size="10" fill="#6B6A60">'+fmtDay(pts[pts.length-1].f)+'</text>';
+
+    var first = pts[0].p, last = pts[pts.length-1].p, diff = last - first;
+    var resumen = '<div class="histStats">' +
+      '<div class="histStat"><div class="n">'+fmt(last,1)+' kg</div><div class="l">último registro</div></div>' +
+      '<div class="histStat"><div class="n">'+(diff>0?'+':'')+fmt(diff,1)+' kg</div><div class="l">desde el primero</div></div>' +
+    '</div>';
+    var leyenda = meta ? '<div class="trendLegend"><span><i style="background:#B58900;"></i>línea punteada = peso meta ('+fmt(meta,1)+' kg)</span></div>' : '';
+    return '<svg viewBox="0 0 '+W+' '+H+'" width="100%" style="max-width:'+W+'px; display:block;" xmlns="http://www.w3.org/2000/svg">'+svg+'</svg>' +
+      leyenda + resumen;
+  }
+
   // ---------- owner: ficha del cliente ----------
   function sexoLabel(s){ return s==='hombre' ? 'Hombre' : (s==='mujer' ? 'Mujer' : null); }
 
@@ -1061,6 +1111,9 @@
         '<div class="field"><label>Promesa de pago</label><input id="fk_prom" type="date" value="'+escapeHtml(m.promesa||'')+'"></div>' +
       '</div>' +
       '<p class="note" style="margin:-4px 0 10px;">Vencimiento: <b style="color:var(--text);">'+(due ? fmtDayY(due) : 'sin fecha')+'</b> (mismo día del mes siguiente al inicio).</p>' +
+      '<h3 style="margin-top:14px;">Mensaje para el cliente</h3>' +
+      '<div class="field"><textarea id="fk_nota" rows="3" placeholder="Ej. buen trabajo esta semana, sube un poco la proteína">'+escapeHtml(m.nota||'')+'</textarea></div>' +
+      (m.notaFecha ? '<p class="note" style="margin:-6px 0 10px;">Última nota: '+fmtDayY(m.notaFecha)+'</p>' : '') +
       '<button class="btn btn-primary" id="fkSave" style="width:100%;">Guardar cambios</button>' +
       '<button class="btn" id="fkStats" style="width:100%; margin-top:8px;">📊 Ver estadísticas</button>' +
       '<h3 style="margin-top:16px;">Acceso</h3>' +
@@ -1072,7 +1125,9 @@
         tr('Último pago registrado', m.ultimoPago ? new Date(m.ultimoPago).toLocaleDateString('es-MX',{day:'numeric',month:'short',year:'numeric'}) : null) +
       '</table>' +
       '<h3 style="margin-top:16px;">Datos que capturó el cliente</h3>' +
-      datosCliente;
+      datosCliente +
+      '<h3 style="margin-top:16px;">Progreso de peso</h3>' +
+      weightChartHtml(p ? p.historialPeso : null, p ? p.pesoMeta : null);
     var ov = openModal(html);
     document.getElementById('fkSave').addEventListener('click', function(){
       if(!state.db){ showToast('No hay conexión a la base de datos.', true); return; }
@@ -1084,6 +1139,11 @@
       };
       if(!upd.nombre){ showToast('Pon el nombre.', true); return; }
       if(upd.inicioPago && upd.inicioPago !== m.inicioPago) upd.ultimoPago = Date.now();
+      var notaNueva = document.getElementById('fk_nota').value.trim();
+      if(notaNueva !== (m.nota||'')){
+        upd.nota = notaNueva || null;
+        upd.notaFecha = notaNueva ? todayKey() : null;
+      }
       state.db.doc('miembros/'+id).update(upd).then(function(){
         ov.remove();
         showToast('Guardado.', false);
@@ -1306,11 +1366,36 @@
     else if(!state.perfil){ renderOnboarding(); }
     else { renderMain(); }
   }
- function renderOwnerOnly(){
+  function renderOwnerOnly(){
     clearHeaderWho();
     document.getElementById('gaugeRow').innerHTML = '';
     document.getElementById('main').innerHTML = renderOwnerPanel();
     wireOwnerPanel();
+  }
+
+  // ---------- nota del entrenador (vista del cliente) ----------
+  function coachNoteHtml(){
+    var m = state.myMember;
+    if(!m || !m.nota) return '';
+    var f = m.notaFecha ? '<div class="note" style="margin-top:6px;">'+fmtDayY(m.notaFecha)+'</div>' : '';
+    return '<div class="card" id="coachNoteCard" style="border-left:5px solid var(--y);">' +
+      '<h3>💬 Mensaje de tu entrenador</h3>' +
+      '<p style="margin:0; font-size:14px;">'+escapeHtml(m.nota).replace(/\n/g,'<br>')+'</p>' + f +
+    '</div>';
+  }
+  // actualiza solo la nota, sin redibujar la pantalla (no borra lo que el cliente esté escribiendo)
+  function updateCoachNote(){
+    var el = document.getElementById('coachNoteSlot');
+    if(el) el.innerHTML = coachNoteHtml();
+  }
+
+  // ---------- peso: registro diario para la gráfica ----------
+  function setPesoHoy(p){
+    if(!state.perfil || !p) return;
+    var hist = (state.perfil.historialPeso || []).filter(function(x){ return x.f !== todayKey(); });
+    hist.push({f: todayKey(), p: p});
+    hist.sort(function(a,b){ return a.f < b.f ? -1 : (a.f > b.f ? 1 : 0); });
+    state.perfil.historialPeso = hist;
   }
 
   // ---------- edad automática desde fecha de nacimiento ----------
@@ -1459,8 +1544,10 @@
         bmrManual: parseFloat(f.bmrManual) || null,
         diasEntreno: parseInt(f.dias, 10) || DEFAULT_TRAIN_DAYS,
         createdAt: (p && p.createdAt) || Date.now(),
-        sexo: f.sexo, objetivo: f.objetivo
+        sexo: f.sexo, objetivo: f.objetivo,
+        historialPeso: (p && p.historialPeso) || []
       };
+      setPesoHoy(peso);
       saveLocal('macros_perfil_v1', state.perfil);
 
       var btn = document.getElementById('saveOnboard');
@@ -1480,7 +1567,7 @@
 
     if(state.isOwner) wireOwnerPanel();
   }
-        
+
   // ---------- targets: META CALÓRICA FIJA ----------
   // Kcal_meta = TDEE x (1 - déficit); TDEE = BMR x factor de actividad (días de entreno por semana).
   // El ejercicio registrado cada día NO modifica kcal ni macros.
@@ -1909,7 +1996,6 @@
       tipHtml = '<div class="proteinTip ok">✅ Ya cubriste tu proteína de hoy. No necesitas batido extra.</div>';
     }
 
-    var weekday = new Date().getDay();
     var weeks = weeksToGoal(state.perfil, targets);
     var weeksNote = weeks ? '<p class="note" style="margin-top:8px;">A tu ritmo actual, estimas llegar a tu peso meta en aprox. <b>'+weeks+' semanas</b>. Es una estimación general, no una promesa — varía según cada cuerpo.</p>' : '';
     var weighIn = nextWeighInInfo();
@@ -1919,13 +2005,14 @@
 
     el.innerHTML =
       (state.isOwner ? renderOwnerPanel() : '') +
+      '<div id="coachNoteSlot">'+coachNoteHtml()+'</div>' +
       renderSupplementsCard() +
       '<div class="weighNote'+(weighIn.due?' due':'')+'">📏 ' + weighIn.msg + '</div>' +
       datalist +
       mealsHtml +
       '<div class="card">' +
         '<h3>¿Cuántas calorías usaste en tu ejercicio de hoy en Titanes?</h3>' +
-        '<div class="field"><label>Calorías quemadas hoy — '+WORKOUT_LABEL_BY_WEEKDAY[weekday]+'</label><input id="burnInput" type="number" value="'+burnHoy+'"></div>' +
+        '<div class="field"><label>Calorías quemadas hoy — '+WORKOUT_LABEL_BY_WEEKDAY[new Date().getDay()]+'</label><input id="burnInput" type="number" value="'+burnHoy+'"></div>' +
         '<p class="note">Es solo tu bitácora personal: ajústalo si tu reloj o banda midió otro número. No cambia tu meta ni tus macros.</p>' +
         '<p style="margin:10px 0 2px; font-weight:700; font-size:15px;">Meta de hoy = '+fmt(targets.kcal)+' kcal (Fija)</p>' +
         '<p class="note" style="margin-top:2px;">Metabolismo basal '+fmt(targets.bmr)+' kcal ('+targets.bmrFuente+') × actividad '+targets.factor+' ('+targets.dias+' días de entreno por semana) = '+fmt(targets.tdee)+' kcal, con '+deficitLabel(targets.deficit)+'. Es la misma meta de lunes a domingo.</p>' +
@@ -1934,14 +2021,36 @@
       '</div>' +
       renderStreakCard() +
       '<div class="card">' +
+        '<h3>Mi progreso de peso</h3>' +
+        weightChartHtml(state.perfil.historialPeso, state.perfil.pesoMeta) +
+        '<div class="field" style="margin-top:12px;">' +
+          '<label>Registra tu peso de hoy (kg)</label>' +
+          '<div class="row2" style="grid-template-columns:1fr auto;">' +
+            '<input id="pesoHoyInput" type="number" step="0.1" placeholder="Ej. 98.5">' +
+            '<button class="btn btn-primary" id="pesoHoyBtn">Guardar</button>' +
+          '</div>' +
+        '</div>' +
+        '<p class="note">Registra tu peso en cada cita de medidas o cuando quieras ver tu avance. Tu meta de calorías no cambia con este registro; si cambió tu peso de verdad, actualízalo en "Mis datos".</p>' +
+      '</div>' +
+      '<div class="card">' +
         '<h3>Mis datos</h3>' +
         '<p class="note">'+escapeHtml(state.perfil.nombre)+' · '+fmt(state.perfil.peso,0)+' kg · '+state.perfil.estatura+' cm · '+state.perfil.edad+' años · '+targets.dias+' días de entreno por semana · objetivo: '+objetivoLabel(state.perfil.objetivo)+'</p>' +
         '<button class="btn btn-ghost" id="editProfileBtn" style="padding:6px 0;">Editar mis datos →</button>' +
       '</div>' +
+      renderStreakCard().replace('', '') +
       '<div class="card" id="historialCard"></div>';
 
     if(state.isOwner) wireOwnerPanel();
     document.getElementById('editProfileBtn').addEventListener('click', renderOnboarding);
+    document.getElementById('pesoHoyBtn').addEventListener('click', function(){
+      var v = parseFloat(document.getElementById('pesoHoyInput').value);
+      if(!v || v < 20 || v > 300){ showToast('Pon un peso válido en kg.', true); return; }
+      setPesoHoy(v);
+      saveLocal('macros_perfil_v1', state.perfil);
+      syncPerfil();
+      showToast('Peso registrado ✅', false);
+      renderMain();
+    });
     Array.prototype.forEach.call(document.querySelectorAll('.searchFoodBtn'), function(b){
       b.addEventListener('click', function(){ handleSearchFood(b.getAttribute('data-meal')); });
     });
