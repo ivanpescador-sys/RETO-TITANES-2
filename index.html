@@ -1028,12 +1028,12 @@
     wireOwnerPanel();
   }
 
-  // ---------- gráfica de peso (cliente y entrenador) ----------
+  // ---------- gráfica de peso (solo en la ficha del entrenador) ----------
   function weightChartHtml(hist, meta){
     var pts = (hist||[]).filter(function(x){ return x && x.f && x.p; })
       .sort(function(a,b){ return a.f < b.f ? -1 : (a.f > b.f ? 1 : 0); });
     if(pts.length < 2){
-      return '<p class="note">Con al menos dos registros de peso aparecerá aquí la gráfica. Cada vez que se registra el peso se agrega un punto.</p>';
+      return '<p class="note">Con al menos dos registros de peso aparecerá aquí la gráfica. Se agrega un punto cada vez que el cliente actualiza su peso en "Mis datos".</p>';
     }
     var W = 340, H = 150, padL = 34, padR = 10, padT = 12, padB = 22;
     var vals = pts.map(function(x){ return x.p; });
@@ -1389,7 +1389,7 @@
     if(el) el.innerHTML = coachNoteHtml();
   }
 
-  // ---------- peso: registro diario para la gráfica ----------
+  // ---------- peso: se registra al guardar "Mis datos" (alimenta la gráfica de la ficha del entrenador) ----------
   function setPesoHoy(p){
     if(!state.perfil || !p) return;
     var hist = (state.perfil.historialPeso || []).filter(function(x){ return x.f !== todayKey(); });
@@ -2021,36 +2021,14 @@
       '</div>' +
       renderStreakCard() +
       '<div class="card">' +
-        '<h3>Mi progreso de peso</h3>' +
-        weightChartHtml(state.perfil.historialPeso, state.perfil.pesoMeta) +
-        '<div class="field" style="margin-top:12px;">' +
-          '<label>Registra tu peso de hoy (kg)</label>' +
-          '<div class="row2" style="grid-template-columns:1fr auto;">' +
-            '<input id="pesoHoyInput" type="number" step="0.1" placeholder="Ej. 98.5">' +
-            '<button class="btn btn-primary" id="pesoHoyBtn">Guardar</button>' +
-          '</div>' +
-        '</div>' +
-        '<p class="note">Registra tu peso en cada cita de medidas o cuando quieras ver tu avance. Tu meta de calorías no cambia con este registro; si cambió tu peso de verdad, actualízalo en "Mis datos".</p>' +
-      '</div>' +
-      '<div class="card">' +
         '<h3>Mis datos</h3>' +
         '<p class="note">'+escapeHtml(state.perfil.nombre)+' · '+fmt(state.perfil.peso,0)+' kg · '+state.perfil.estatura+' cm · '+state.perfil.edad+' años · '+targets.dias+' días de entreno por semana · objetivo: '+objetivoLabel(state.perfil.objetivo)+'</p>' +
         '<button class="btn btn-ghost" id="editProfileBtn" style="padding:6px 0;">Editar mis datos →</button>' +
       '</div>' +
-      renderStreakCard().replace('', '') +
       '<div class="card" id="historialCard"></div>';
 
     if(state.isOwner) wireOwnerPanel();
     document.getElementById('editProfileBtn').addEventListener('click', renderOnboarding);
-    document.getElementById('pesoHoyBtn').addEventListener('click', function(){
-      var v = parseFloat(document.getElementById('pesoHoyInput').value);
-      if(!v || v < 20 || v > 300){ showToast('Pon un peso válido en kg.', true); return; }
-      setPesoHoy(v);
-      saveLocal('macros_perfil_v1', state.perfil);
-      syncPerfil();
-      showToast('Peso registrado ✅', false);
-      renderMain();
-    });
     Array.prototype.forEach.call(document.querySelectorAll('.searchFoodBtn'), function(b){
       b.addEventListener('click', function(){ handleSearchFood(b.getAttribute('data-meal')); });
     });
