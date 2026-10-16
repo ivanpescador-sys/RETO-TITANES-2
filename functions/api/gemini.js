@@ -6,7 +6,7 @@ const json = (obj, status = 200) =>
 
 // Modelos a probar en orden: el configurado y dos de respaldo
 function modelList(env) {
-  const list = [env.GEMINI_MODEL, "gemini-2.5-flash", "gemini-2.0-flash"]
+  const list = [env.GEMINI_MODEL, "gemini-2.5-flash",]
     .map((m) => String(m || "").trim())
     .filter(Boolean);
   return [...new Set(list)];
