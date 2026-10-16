@@ -715,6 +715,19 @@
     return pick(letras)+pick(letras)+pick(digitos)+pick(digitos)+pick(digitos);
   }
 
+  // código que no lo tenga ya otro cliente
+  function codeTaken(c){
+    var norm = String(c).trim().toUpperCase();
+    return Object.keys(state.miembros||{}).some(function(id){
+      return String(state.miembros[id].codigo||'').trim().toUpperCase() === norm;
+    });
+  }
+  function uniqueCode(){
+    var c;
+    do { c = randomCode(); } while(codeTaken(c));
+    return c;
+  }
+
   var ownerSearchQuery = '';
   var ownerFilter = 'todos';
 
@@ -814,7 +827,7 @@
       '<h3 style="margin-top:14px;">Dar de alta a un cliente</h3>' +
       '<div class="row2" style="margin-top:6px;">' +
         '<div class="field"><label>Nombre</label><input id="newMemberName" type="text"></div>' +
-        '<div class="field"><label>Código</label><input id="newMemberCode" type="text" value="'+randomCode()+'"></div>' +
+        '<div class="field"><label>Código</label><input id="newMemberCode" type="text" value="'+uniqueCode()+'"></div>' +
       '</div>' +
       '<div class="row2">' +
         '<div class="field"><label>Teléfono</label><input id="newMemberPhone" type="tel" placeholder="10 dígitos"></div>' +
@@ -858,11 +871,13 @@
       var telefono = document.getElementById('newMemberPhone').value.trim();
       var inicio = document.getElementById('newMemberInicio').value || null;
       if(!nombre || !codigo){ showToast('Pon nombre y código.', true); return; }
+      if(codeTaken(codigo)){ showToast('Ese código ya lo tiene otro cliente. Cámbialo o toca 🔄 para generar uno nuevo.', true); return; }
       if(!state.db){ showToast('No hay conexión a la base de datos.', true); return; }
       try{
         await state.db.collection('miembros').add({nombre:nombre, codigo:codigo, telefono:telefono, inicioPago:inicio, ultimoPago:inicio?Date.now():null, promesa:null, activo:true, dispositivos:[], creadoEn:Date.now()});
         document.getElementById('newMemberName').value = '';
         document.getElementById('newMemberPhone').value = '';
+        document.getElementById('newMemberCode').value = uniqueCode();
       }catch(e){ showToast('No se pudo agregar.', true); }
     });
     wireMemberRowButtons();
@@ -968,7 +983,7 @@
         var m = state.miembros[id];
         if(!state.db) return;
         armConfirmButton(btn, '✅', async function(){
-          var nuevo = randomCode();
+          var nuevo = uniqueCode();
           try{
             await state.db.doc('miembros/'+id).update({codigo: nuevo, dispositivos: []});
             showToast('Nuevo código para '+(m.nombre||'')+': '+nuevo, false);
